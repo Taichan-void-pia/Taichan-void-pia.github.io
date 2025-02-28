@@ -1,8 +1,7 @@
 body {
-    font-family: 'Orbitron', sans-serif;
+    font-family: Arial, sans-serif;
     background-color: #000;
     color: #fff;
-    overflow: hidden;
     margin: 0;
     padding: 0;
 }
@@ -13,16 +12,14 @@ body {
     background-color: rgba(0, 255, 255, 0.8);
     color: #000;
     font-weight: bold;
-    font-size: 1em;
     padding: 10px 20px;
     z-index: 100;
+    cursor: pointer;
     box-shadow: 0 0 10px cyan;
     text-transform: uppercase;
-    cursor: pointer;
-    border: none;
 }
 
-/* 上下左右の配置 */
+/* 上下左右配置 */
 .top-button {
     top: 10px;
     left: 50%;
