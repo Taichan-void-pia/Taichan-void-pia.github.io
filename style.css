@@ -14,38 +14,27 @@ body {
 /* ヘッダー */
 header {
     text-align: center;
-    margin-top: 20px;
-}
-
-/* メインエリア */
-.area-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 50px;
-    flex-grow: 1;
-}
-
-/* プレビュー画像＋ボタン */
-.area-preview {
-    text-align: center;
-    background-color: rgba(0, 255, 255, 0.1);
-    padding: 20px;
-    border: 1px solid cyan;
-    box-shadow: 0 0 10px cyan;
-    border-radius: 10px;
-}
-
-.area-preview img {
-    width: 300px;
-    height: auto;
-    object-fit: cover;
-    border: 2px solid cyan;
-    box-shadow: 0 0 5px cyan;
-}
-
-.area-preview button {
     margin-top: 10px;
+}
+
+/* エリア表示エリア */
+.area-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    flex-grow: 1;
+    justify-content: center;
+}
+
+.area-display img {
+    width: 400px;
+    height: auto;
+    border: 2px solid cyan;
+    box-shadow: 0 0 15px cyan;
+}
+
+.area-display button {
     padding: 10px 20px;
     background-color: cyan;
     border: none;
@@ -55,14 +44,38 @@ header {
     transition: background-color 0.3s ease;
 }
 
-.area-preview button:hover {
+.area-display button:hover {
     background-color: #00a5a5;
+}
+
+/* ナビゲーションボタン */
+.nav-button {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: rgba(0, 255, 255, 0.8);
+    border: none;
+    color: #000;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 10px 20px;
+    z-index: 100;
+    box-shadow: 0 0 10px cyan;
+}
+
+.left-button {
+    left: 10px;
+}
+
+.right-button {
+    right: 10px;
 }
 
 /* フッター */
 footer {
     text-align: center;
-    padding: 10px;
+    padding: 5px;
     font-size: 0.8em;
 }
 
