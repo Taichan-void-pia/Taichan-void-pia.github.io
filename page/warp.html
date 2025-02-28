@@ -48,7 +48,7 @@
 <body>
     <div class="video-container">
         <video autoplay muted playsinline>
-            <source src="img/portal.mp4" type="video/mp4">
+            <source src="../img/portal.mp4" type="video/mp4">
             お使いのブラウザはvideoタグをサポートしていません。
         </video>
     </div>
@@ -59,7 +59,7 @@
         const params = new URLSearchParams(window.location.search);
         const target = params.get('target');
 
-        const sound = new Audio('source/sound/warp.mp3'); // 転送音
+        const sound = new Audio('../source/sound/warp.mp3'); // 転送音
         sound.play().catch(e => console.warn('音が再生できませんでした:', e));
 
         // 動画の再生時間に合わせてページ遷移（3秒に設定）
