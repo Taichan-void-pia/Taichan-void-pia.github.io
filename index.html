@@ -2,31 +2,32 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Cyber City Hub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エリア選択</title>
     <link rel="stylesheet" href="style.css">
-    <script src="script.js" defer></script>
 </head>
-<body class="fade-in">
-
+<body>
 <header>
-    <h1>Cyber City Gateway</h1>
-    <p>Choose your destination</p>
+    <h1>エリア選択画面</h1>
 </header>
 
-<!-- 左右の切り替えボタン -->
-<button class="nav-button left-button">&lt;</button>
-<button class="nav-button right-button">&gt;</button>
+<div class="area-display">
+    <img id="area-image" src="img/areaA.jpg" alt="エリア画像">
+    <div id="area-name">エリア1</div>
+    <button onclick="moveToPage()">このエリアへ移動</button>
+</div>
 
-<!-- エリア表示エリア -->
-<main class="area-display">
-    <img id="area-image" src="img/areaA.png" alt="Area Preview">
-    <p id="area-name">エリアA</p>
-    <button id="go-button" onclick="goToPage('areaA.html')">エリアAへ行く</button>
-</main>
+<!-- 左右ナビボタン -->
+<button class="nav-button left-button" onclick="changeArea(-1)">←</button>
+<button class="nav-button right-button" onclick="changeArea(1)">→</button>
+
+<!-- ボタン音のためのオーディオ -->
+<audio id="button-sound" src="source/button-click.mp3"></audio>
 
 <footer>
-    <p>© 2025 Cyber City Network</p>
+    <p>&copy; 2025 My RPG Site</p>
 </footer>
 
+<script src="script.js"></script>
 </body>
 </html>
