@@ -2,28 +2,40 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cyber City Hub</title>
     <link rel="stylesheet" href="style.css">
-    <script src="script.js" defer></script>
 </head>
 <body class="fade-in">
-    <header>
-        <h1>CYBER CITY CENTRAL HUB</h1>
-    </header>
 
-    <!-- 各方向ボタン（常に表示） -->
-    <div class="fixed-button top-button">SYSTEM</div>
-    <div class="fixed-button bottom-button">CREDITS</div>
-    <div class="fixed-button left-button">WORLD</div>
-    <div class="fixed-button right-button">MENU</div>
+<header>
+    <h1>Cyber City Gateway</h1>
+    <p>Choose your destination</p>
+</header>
 
-    <main>
-        <p>エリア選択や説明などをここに表示</p>
-    </main>
+<main class="area-container">
+    <section class="area-preview">
+        <img src="areaA-preview.png" alt="Area A Preview">
+        <button onclick="goToPage('areaA.html')">エリアAへ行く</button>
+    </section>
 
-    <footer>
-        <p>© 2025 Cyber City Network</p>
-    </footer>
+    <section class="area-preview">
+        <img src="areaB-preview.png" alt="Area B Preview">
+        <button onclick="goToPage('areaB.html')">エリアBへ行く</button>
+    </section>
+</main>
+
+<footer>
+    <p>© 2025 Cyber City Network</p>
+</footer>
+
+<script>
+function goToPage(url) {
+    document.body.classList.add('fade-out');
+    setTimeout(() => {
+        window.location.href = url;
+    }, 800);
+}
+</script>
+
 </body>
 </html>
