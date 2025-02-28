@@ -1,89 +1,84 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
 body {
     font-family: 'Orbitron', sans-serif;
     background-color: #000;
     color: #fff;
-    overflow-x: hidden;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-
-header {
-    text-align: center;
-    padding: 30px 0;
-    background: linear-gradient(135deg, #000428, #004e92);
-    text-shadow: 0 0 10px #00f, 0 0 20px #00f;
-}
-
-header h1 {
-    font-size: 2.5em;
-}
-
-header p {
-    font-size: 1.2em;
-    opacity: 0.8;
-}
-
-main {
-    flex: 1;
-    padding: 20px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.area-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-    width: 90%;
-    max-width: 1200px;
-}
-
-.area-card {
-    background-color: rgba(0, 0, 0, 0.8);
-    border: 2px solid var(--color);
-    color: var(--color);
-    padding: 20px;
-    text-decoration: none;
-    text-shadow: 0 0 5px var(--color);
-    box-shadow: 0 0 15px var(--color);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    position: relative;
     overflow: hidden;
+    margin: 0;
+    padding: 0;
 }
 
-.area-card::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: radial-gradient(circle, transparent, rgba(0,0,0,0.8));
-    z-index: 0;
-}
-
-.area-card h2, .area-card p {
-    position: relative;
-    z-index: 1;
-}
-
-.area-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 0 30px var(--color);
-}
-
-footer {
-    text-align: center;
+/* 隠れボタン共通 */
+.edge-button {
+    position: fixed;
+    background-color: rgba(0, 255, 255, 0.8);
+    color: #000;
+    font-weight: bold;
+    font-size: 0.9em;
     padding: 10px;
-    font-size: 0.8em;
-    background: #111;
-    color: #888;
+    cursor: pointer;
+    z-index: 100;
+    text-transform: uppercase;
+    transition: transform 0.3s ease;
 }
+
+/* 各方向ごと配置 */
+.top-button {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100%);
+}
+.top-button:hover {
+    transform: translateX(-50%) translateY(0);
+}
+
+.bottom-button {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%) translateY(100%);
+}
+.bottom-button:hover {
+    transform: translateX(-50%) translateY(0);
+}
+
+.left-button {
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%) translateX(-100%);
+    writing-mode: vertical-rl;
+}
+.left-button:hover {
+    transform: translateY(-50%) translateX(0);
+}
+
+.right-button {
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%) translateX(100%);
+    writing-mode: vertical-rl;
+}
+.right-button:hover {
+    transform: translateY(-50%) translateX(0);
+}
+
+/* ページ遷移アニメーション */
+.fade-in {
+    animation: fadeIn 0.8s ease-out;
+}
+
+.fade-out {
+    animation: fadeOut 0.8s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+/* 既存のエリアカード等のスタイルはそのままでOK */
