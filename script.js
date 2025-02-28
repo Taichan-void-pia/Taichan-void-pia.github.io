@@ -37,5 +37,5 @@ function changeArea(direction) {
 // 移動ボタン押下時処理
 function moveToPage() {
     playButtonSound();
-    window.location.href = "page/warp.html?target=page/"+areas[currentArea].link;
+    window.location.href = "page/warp.html?target="+areas[currentArea].link;
 }
