@@ -1,7 +1,7 @@
 const areas = [
-    { name: 'エリアA', image: 'areaA-preview.png', link: 'areaA.html' },
-    { name: 'エリアB', image: 'areaB-preview.png', link: 'areaB.html' },
-    { name: 'エリアC', image: 'areaC-preview.png', link: 'areaC.html' }
+    { name: 'エリアA', image: 'img/areaA.png', link: 'areaA.html' },
+    { name: 'エリアB', image: 'img/areaB.png', link: 'areaB.html' },
+    { name: 'エリアC', image: 'img/areaC.png', link: 'areaC.html' }
 ];
 
 let currentIndex = 0;
