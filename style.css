@@ -1,47 +1,69 @@
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Arial', sans-serif;
     background-color: #000;
     color: #fff;
     margin: 0;
     padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    justify-content: space-between;
+    align-items: center;
 }
 
-/* ボタン共通 */
-.fixed-button {
-    position: fixed;
-    background-color: rgba(0, 255, 255, 0.8);
-    color: #000;
-    font-weight: bold;
-    padding: 10px 20px;
-    z-index: 100;
-    cursor: pointer;
+/* ヘッダー */
+header {
+    text-align: center;
+    margin-top: 20px;
+}
+
+/* メインエリア */
+.area-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 50px;
+    flex-grow: 1;
+}
+
+/* プレビュー画像＋ボタン */
+.area-preview {
+    text-align: center;
+    background-color: rgba(0, 255, 255, 0.1);
+    padding: 20px;
+    border: 1px solid cyan;
     box-shadow: 0 0 10px cyan;
-    text-transform: uppercase;
+    border-radius: 10px;
 }
 
-/* 上下左右配置 */
-.top-button {
-    top: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+.area-preview img {
+    width: 300px;
+    height: auto;
+    object-fit: cover;
+    border: 2px solid cyan;
+    box-shadow: 0 0 5px cyan;
 }
 
-.bottom-button {
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+.area-preview button {
+    margin-top: 10px;
+    padding: 10px 20px;
+    background-color: cyan;
+    border: none;
+    color: black;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
 }
 
-.left-button {
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
+.area-preview button:hover {
+    background-color: #00a5a5;
 }
 
-.right-button {
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
+/* フッター */
+footer {
+    text-align: center;
+    padding: 10px;
+    font-size: 0.8em;
 }
 
 /* ページ遷移アニメーション */
