@@ -1,7 +1,7 @@
 const areas = [
-    {name: "エリア1", img: "images/area1.jpg", link: "area1.html"},
-    {name: "エリア2", img: "images/area2.jpg", link: "area2.html"},
-    {name: "エリア3", img: "images/area3.jpg", link: "area3.html"}
+    {name: "エリア1", img: "img/areaA.jpg", link: "area1.html"},
+    {name: "エリア2", img: "img/areaB.jpg", link: "area2.html"},
+    {name: "エリア3", img: "img/areaC.jpg", link: "area3.html"}
 ];
 
 let currentArea = 0;
