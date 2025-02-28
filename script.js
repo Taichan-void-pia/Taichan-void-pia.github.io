@@ -1,6 +1,6 @@
 const areas = [
     {name: "エリア1", img: "img/areaA.png", link: "area1.html"},
-    {name: "エリア2", img: "img/areaB.png, link: "area2.html"},
+    {name: "エリア2", img: "img/areaB.png", link: "area2.html"},
     {name: "エリア3", img: "img/areaC.png", link: "area3.html"}
 ];
 
