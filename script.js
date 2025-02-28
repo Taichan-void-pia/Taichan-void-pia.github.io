@@ -1,35 +1,37 @@
 const areas = [
-    { name: 'エリアA', image: 'img/areaA.png', link: 'areaA.html' },
-    { name: 'エリアB', image: 'img/areaB.png', link: 'areaB.html' },
-    { name: 'エリアC', image: 'img/areaC.png', link: 'areaC.html' }
+    {name: "エリア1", img: "img/areaA.jpg", link: "area1.html"},
+    {name: "エリア2", img: "img/areaB.jpg", link: "area2.html"},
+    {name: "エリア3", img: "img/areaC.jpg", link: "area3.html"}
 ];
 
-let currentIndex = 0;
+let currentArea = 0;
 
-function updateAreaDisplay() {
-    const area = areas[currentIndex];
-    document.getElementById('area-image').src = area.image;
-    document.getElementById('area-name').textContent = area.name;
-    document.getElementById('go-button').onclick = () => goToPage(area.link);
-}
+function changeArea(direction) {
+    const sound = document.getElementById('button-sound');
+    sound.play();
 
-function goToPage(url) {
-    document.body.classList.add('fade-out');
+    const img = document.getElementById('area-image');
+    const areaName = document.getElementById('area-name');
+
+    // フェードアウト
+    img.style.opacity = '0';
+
     setTimeout(() => {
-        window.location.href = url;
-    }, 800);
+        currentArea = (currentArea + direction + areas.length) % areas.length;
+        img.src = areas[currentArea].img;
+        areaName.textContent = areas[currentArea].name;
+
+        // フェードイン
+        img.style.opacity = '1';
+    }, 800); // フェードアウト後に画像切替
 }
 
-// 左右ボタンのイベント
-document.querySelector('.left-button').addEventListener('click', () => {
-    currentIndex = (currentIndex - 1 + areas.length) % areas.length;
-    updateAreaDisplay();
-});
+function moveToPage() {
+    const sound = document.getElementById('button-sound');
+    sound.play();
 
-document.querySelector('.right-button').addEventListener('click', () => {
-    currentIndex = (currentIndex + 1) % areas.length;
-    updateAreaDisplay();
-});
-
-// 初期表示
-updateAreaDisplay();
+    const targetPage = areas[currentArea].link;
+    setTimeout(() => {
+        window.location.href = targetPage;
+    }, 200); // 音が鳴った後で遷移
+}
