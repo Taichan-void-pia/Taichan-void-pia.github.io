@@ -1,14 +1,17 @@
-const links = {
-    top: 'system.html',
-    bottom: 'credits.html',
-    left: 'world.html',
-    right: 'menu.html'
-};
+const areas = [
+    { name: 'エリアA', image: 'areaA-preview.png', link: 'areaA.html' },
+    { name: 'エリアB', image: 'areaB-preview.png', link: 'areaB.html' },
+    { name: 'エリアC', image: 'areaC-preview.png', link: 'areaC.html' }
+];
 
-document.querySelector('.top-button').addEventListener('click', () => goToPage(links.top));
-document.querySelector('.bottom-button').addEventListener('click', () => goToPage(links.bottom));
-document.querySelector('.left-button').addEventListener('click', () => goToPage(links.left));
-document.querySelector('.right-button').addEventListener('click', () => goToPage(links.right));
+let currentIndex = 0;
+
+function updateAreaDisplay() {
+    const area = areas[currentIndex];
+    document.getElementById('area-image').src = area.image;
+    document.getElementById('area-name').textContent = area.name;
+    document.getElementById('go-button').onclick = () => goToPage(area.link);
+}
 
 function goToPage(url) {
     document.body.classList.add('fade-out');
@@ -16,3 +19,17 @@ function goToPage(url) {
         window.location.href = url;
     }, 800);
 }
+
+// 左右ボタンのイベント
+document.querySelector('.left-button').addEventListener('click', () => {
+    currentIndex = (currentIndex - 1 + areas.length) % areas.length;
+    updateAreaDisplay();
+});
+
+document.querySelector('.right-button').addEventListener('click', () => {
+    currentIndex = (currentIndex + 1) % areas.length;
+    updateAreaDisplay();
+});
+
+// 初期表示
+updateAreaDisplay();
