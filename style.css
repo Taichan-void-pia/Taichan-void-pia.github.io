@@ -38,7 +38,7 @@ header {
 
 @media (max-width: 768px) and (orientation: portrait) {
     .area-display img {
-        width: 95%;
+        width: 80%;
         max-width: none;
     }
 }
