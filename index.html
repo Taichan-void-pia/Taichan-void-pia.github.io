@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Cyber City Hub</title>
     <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
 </head>
 <body class="fade-in">
 
@@ -12,30 +13,20 @@
     <p>Choose your destination</p>
 </header>
 
-<main class="area-container">
-    <section class="area-preview">
-        <img src="areaA-preview.png" alt="Area A Preview">
-        <button onclick="goToPage('areaA.html')">エリアAへ行く</button>
-    </section>
+<!-- 左右の切り替えボタン -->
+<button class="nav-button left-button">&lt;</button>
+<button class="nav-button right-button">&gt;</button>
 
-    <section class="area-preview">
-        <img src="areaB-preview.png" alt="Area B Preview">
-        <button onclick="goToPage('areaB.html')">エリアBへ行く</button>
-    </section>
+<!-- エリア表示エリア -->
+<main class="area-display">
+    <img id="area-image" src="areaA-preview.png" alt="Area Preview">
+    <p id="area-name">エリアA</p>
+    <button id="go-button" onclick="goToPage('areaA.html')">エリアAへ行く</button>
 </main>
 
 <footer>
     <p>© 2025 Cyber City Network</p>
 </footer>
-
-<script>
-function goToPage(url) {
-    document.body.classList.add('fade-out');
-    setTimeout(() => {
-        window.location.href = url;
-    }, 800);
-}
-</script>
 
 </body>
 </html>
