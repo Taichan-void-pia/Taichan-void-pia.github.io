@@ -3,22 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>転送中...</title>
+    <title>空間転送中...</title>
     <style>
         body {
-            background-color: black;
-            color: cyan;
+            margin: 0;
+            overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            margin: 0;
+            background-color: black;
             font-family: 'Arial', sans-serif;
-            font-size: 24px;
         }
-        .warp-message {
+
+        .video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .message {
+            color: cyan;
+            font-size: 24px;
+            z-index: 10;
             animation: blink 1s infinite alternate;
         }
+
         @keyframes blink {
             0% { opacity: 1; }
             100% { opacity: 0.3; }
@@ -26,26 +46,28 @@
     </style>
 </head>
 <body>
-    <video>
-        <source src="img/portal.mp4" type="video/mp4">
-    </video>
-    <div class="warp-message">空間転送中...</div>
+    <div class="video-container">
+        <video autoplay muted playsinline>
+            <source src="img/portal.mp4" type="video/mp4">
+            お使いのブラウザはvideoタグをサポートしていません。
+        </video>
+    </div>
+
+    <div class="message">空間転送中...</div>
 
     <script>
-        // URLから次に飛ぶページの情報を取得
         const params = new URLSearchParams(window.location.search);
         const target = params.get('target');
 
-        // 転送音を鳴らす
-        const sound = new Audio('portal.mp3'); 
+        const sound = new Audio('img/portal.mp3'); // 転送音
         sound.play().catch(e => console.warn('音が再生できませんでした:', e));
 
-        // 3秒後に目的ページに移動
+        // 動画の再生時間に合わせてページ遷移（3秒に設定）
         setTimeout(() => {
             if (target) {
                 window.location.href = target;
             } else {
-                window.location.href = 'index.html';  // targetが無い場合はトップに戻る
+                window.location.href = 'index.html';
             }
         }, 3000);
     </script>
