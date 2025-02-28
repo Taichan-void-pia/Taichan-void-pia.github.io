@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>転送中...</title>
+    <style>
+        body {
+            background-color: black;
+            color: cyan;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            font-size: 24px;
+        }
+        .warp-message {
+            animation: blink 1s infinite alternate;
+        }
+        @keyframes blink {
+            0% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div class="warp-message">空間転送中...</div>
+
+    <script>
+        // URLから次に飛ぶページの情報を取得
+        const params = new URLSearchParams(window.location.search);
+        const target = params.get('target');
+
+        // 転送音を鳴らす（音ファイルがあれば使ってください）
+        const sound = new Audio('warp-sound.mp3');  // 適宜ファイル名変更
+        sound.play().catch(e => console.warn('音が再生できませんでした:', e));
+
+        // 3秒後に目的ページに移動
+        setTimeout(() => {
+            if (target) {
+                window.location.href = target;
+            } else {
+                window.location.href = 'index.html';  // targetが無い場合はトップに戻る
+            }
+        }, 3000);
+    </script>
+</body>
+</html>
