@@ -61,7 +61,32 @@ header {
 .area-display button:hover {
     background-color: #00a5a5;
 }
-
+    /* 各光（点）のスタイル設定 */
+    .light {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 20px;
+      height: 20px;
+      background: radial-gradient(circle, rgba(255,255,255,1) 10%, rgba(255,255,255,0) 80%);
+      border-radius: 50%;
+      filter: blur(3px);
+      animation: converge 4s infinite;
+    }
+    /* 光の移動・縮小・フェードのアニメーション */
+    @keyframes converge {
+      0% {
+        transform: translate(var(--start-x), var(--start-y)) scale(1.2);
+        opacity: 0;
+      }
+      20% {
+        opacity: 1;
+      }
+      100% {
+        transform: translate(0, 0) scale(0.6);
+        opacity: 0;
+      }
+    }
 .nav-button {
     position: fixed;
     top: 50%;
