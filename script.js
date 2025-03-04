@@ -39,3 +39,30 @@ function moveToPage() {
     playButtonSound();
     window.location.href = "page/warp.html?target="+areas[currentArea].link;
 }
+
+
+// 生成する光の数（必要に応じて変更）
+    const numLights = 300;
+    const bodyEl = document.body;
+
+    // min～maxの間でランダムな数値を生成する関数
+    function random(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    for (let i = 0; i < numLights; i++) {
+      const light = document.createElement('div');
+      light.className = 'light';
+
+      // 中心からの初期オフセットをランダムに設定（例：-600px～600px）
+      const offsetX = random(-600, 600);
+      const offsetY = random(-600, 600);
+      light.style.setProperty('--start-x', offsetX + 'px');
+      light.style.setProperty('--start-y', offsetY + 'px');
+
+      // アニメーション開始のタイミングをランダムに（例：0～5秒）
+      const delay = random(0, 5);
+      light.style.animationDelay = delay + 's';
+
+      bodyEl.appendChild(light);
+    }
