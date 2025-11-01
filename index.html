@@ -18,13 +18,13 @@
 
 <div class="area-display">
     <img id="area-image" src="img/areaA.png" alt="エリア画像">
+    <!-- 左右ナビボタン -->
+    <button class="nav-button left-button" onclick="changeArea(-1)">←</button>
+    <button class="nav-button right-button" onclick="changeArea(1)">→</button>
     <div id="area-name">Project-Nexus</div>
     <button onclick="moveToPage()">このエリアへ移動</button>
 </div>
 
-<!-- 左右ナビボタン -->
-<button class="nav-button left-button" onclick="changeArea(-1)">←</button>
-<button class="nav-button right-button" onclick="changeArea(1)">→</button>
 
 <!-- 効果音ファイル -->
 <audio id="button-sound" preload="auto">
