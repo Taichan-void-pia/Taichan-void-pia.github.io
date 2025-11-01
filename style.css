@@ -104,11 +104,11 @@ header {
 }
 
 .left-button {
-    left: -60px;
+    left: -10px;
 }
 
 .right-button {
-    right: -60px;
+    right: -10px;
 }
 
 @media (max-width: 768px) {
