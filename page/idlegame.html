@@ -184,6 +184,7 @@
       }
     }
 
+    // --- 高速収入ループ ---
     let remainder = 0;
     setInterval(() => {
       const totalPerSec = incomePerSecond * efficiency;
@@ -194,8 +195,12 @@
         money += add;
         remainder -= add;
       }
+
+      // 👇 ← 表示更新を追加！（これがなかった）
+      updateDisplay();
     }, 1);
 
+    // --- 自動セーブ ---
     setInterval(saveGame, 5000);
 
     loadGame();
