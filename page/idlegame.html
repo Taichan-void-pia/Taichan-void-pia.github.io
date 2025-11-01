@@ -2,101 +2,202 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>💰 放置マネーゲーム</title>
+  <title>💰 放置マネーゲーム Neo</title>
   <style>
     body {
-      font-family: sans-serif;
-      text-align: center;
-      margin-top: 50px;
-      background: #222;
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
       color: #fff;
+      text-align: center;
+      overflow-x: hidden;
     }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      margin-top: 20px;
-      background: #4caf50;
-      color: white;
+
+    h1 {
+      margin-top: 40px;
+      font-size: 2.5em;
+      color: #00e676;
+      text-shadow: 0 0 10px #00e676;
+    }
+
+    .stats {
+      margin-top: 30px;
+      font-size: 1.4em;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 16px;
+      display: inline-block;
+      padding: 20px 40px;
+      box-shadow: 0 0 20px rgba(0, 255, 150, 0.2);
+    }
+
+    .money {
+      font-size: 2em;
+      color: #00e676;
+      font-weight: bold;
+    }
+
+    .upgrade-container {
+      margin-top: 40px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      padding: 0 20px;
+    }
+
+    .upgrade-card {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      width: 250px;
+      padding: 20px;
+      transition: 0.3s;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
+    }
+
+    .upgrade-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 0 20px rgba(0, 255, 150, 0.3);
+    }
+
+    .upgrade-card button {
+      margin-top: 15px;
+      background: linear-gradient(90deg, #00e676, #00bfa5);
+      color: #fff;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
+      font-size: 1.1em;
+      padding: 10px 20px;
       cursor: pointer;
+      transition: 0.2s;
+      width: 100%;
     }
-    button:hover { background: #66bb6a; }
+
+    .upgrade-card button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 15px #00e676;
+    }
+
+    .reset-btn {
+      margin-top: 40px;
+      background: #f44336;
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      font-size: 1em;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .reset-btn:hover {
+      background: #ff5252;
+      box-shadow: 0 0 10px #ff1744;
+    }
   </style>
 </head>
 <body>
-  <h1>💰 放置マネーゲーム</h1>
-  <p>所持金：<span id="money">0</span></p>
-  <p>1秒あたりの収入：<span id="rate">1</span></p>
-  <button onclick="upgrade()">強化する（コスト <span id="cost">10</span>）</button>
-  <br><br>
-  <button onclick="resetGame()" style="background:#f44336;">リセット</button>
+  <h1>💰 放置マネーゲーム Neo</h1>
+
+  <div class="stats">
+    <div>所持金：<span class="money" id="money">0</span></div>
+    <div>1秒あたりの収入：<span id="rate">1</span></div>
+  </div>
+
+  <div class="upgrade-container">
+    <div class="upgrade-card">
+      <h3>💹 収入アップ</h3>
+      <p>1秒あたりの基本収入を上げます。</p>
+      <button onclick="upgradeIncome()">購入（<span id="costIncome">10</span>）</button>
+    </div>
+
+    <div class="upgrade-card">
+      <h3>⚙️ 効率アップ</h3>
+      <p>収入倍率を強化します。</p>
+      <button onclick="upgradeEfficiency()">購入（<span id="costEff">25</span>）</button>
+    </div>
+  </div>
+
+  <button class="reset-btn" onclick="resetGame()">リセット</button>
 
   <script>
     let money = 0;
     let incomePerSecond = 1;
-    let upgradeCost = 10;
+    let efficiency = 1;
+    let upgradeCostIncome = 10;
+    let upgradeCostEff = 25;
 
-    // --- 表示更新 ---
     function updateDisplay() {
       document.getElementById("money").textContent = Math.floor(money);
-      document.getElementById("rate").textContent = incomePerSecond.toFixed(2);
-      document.getElementById("cost").textContent = Math.floor(upgradeCost);
+      document.getElementById("rate").textContent = Math.floor(incomePerSecond * efficiency);
+      document.getElementById("costIncome").textContent = Math.floor(upgradeCostIncome);
+      document.getElementById("costEff").textContent = Math.floor(upgradeCostEff);
     }
 
-    // --- 強化処理 ---
-    function upgrade() {
-      if (money >= upgradeCost) {
-        money -= upgradeCost;
+    function saveGame() {
+      const saveData = {
+        money, incomePerSecond, efficiency, upgradeCostIncome, upgradeCostEff
+      };
+      localStorage.setItem("idleGameSaveV3", JSON.stringify(saveData));
+    }
+
+    function loadGame() {
+      const saved = localStorage.getItem("idleGameSaveV3");
+      if (saved) {
+        const data = JSON.parse(saved);
+        money = data.money || 0;
+        incomePerSecond = data.incomePerSecond || 1;
+        efficiency = data.efficiency || 1;
+        upgradeCostIncome = data.upgradeCostIncome || 10;
+        upgradeCostEff = data.upgradeCostEff || 25;
+      }
+    }
+
+    function resetGame() {
+      if (confirm("最初からやり直しますか？")) {
+        localStorage.removeItem("idleGameSaveV3");
+        money = 0;
+        incomePerSecond = 1;
+        efficiency = 1;
+        upgradeCostIncome = 10;
+        upgradeCostEff = 25;
+        updateDisplay();
+      }
+    }
+
+    function upgradeIncome() {
+      if (money >= upgradeCostIncome) {
+        money -= upgradeCostIncome;
         incomePerSecond *= 1.5;
-        upgradeCost *= 2;
+        upgradeCostIncome *= 2;
         saveGame();
         updateDisplay();
       }
     }
 
-    // --- セーブ処理 ---
-    function saveGame() {
-      const saveData = {
-        money: money,
-        incomePerSecond: incomePerSecond,
-        upgradeCost: upgradeCost
-      };
-      localStorage.setItem("idleGameSave", JSON.stringify(saveData));
-    }
-
-    // --- ロード処理 ---
-    function loadGame() {
-      const saved = localStorage.getItem("idleGameSave");
-      if (saved) {
-        const data = JSON.parse(saved);
-        money = data.money || 0;
-        incomePerSecond = data.incomePerSecond || 1;
-        upgradeCost = data.upgradeCost || 10;
-      }
-    }
-
-    // --- リセット処理 ---
-    function resetGame() {
-      if (confirm("ゲームを最初からやり直しますか？")) {
-        localStorage.removeItem("idleGameSave");
-        money = 0;
-        incomePerSecond = 1;
-        upgradeCost = 10;
+    function upgradeEfficiency() {
+      if (money >= upgradeCostEff) {
+        money -= upgradeCostEff;
+        efficiency *= 1.2;
+        upgradeCostEff *= 2.5;
+        saveGame();
         updateDisplay();
       }
     }
 
-    // --- 自動収入 ---
+    let remainder = 0;
     setInterval(() => {
-      money += incomePerSecond;
-      updateDisplay();
-    }, 1000);
+      const totalPerSec = incomePerSecond * efficiency;
+      const perMs = totalPerSec / 1000;
+      remainder += perMs;
+      if (remainder >= 1) {
+        const add = Math.floor(remainder);
+        money += add;
+        remainder -= add;
+      }
+    }, 1);
 
-    // --- 自動セーブ（5秒ごと） ---
     setInterval(saveGame, 5000);
 
-    // --- 初回読み込み時にロード ---
     loadGame();
     updateDisplay();
   </script>
