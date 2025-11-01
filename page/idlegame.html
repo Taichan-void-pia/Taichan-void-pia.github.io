@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>💰 放置マネーゲーム</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin-top: 50px;
+      background: #222;
+      color: #fff;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-top: 20px;
+      background: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { background: #66bb6a; }
+  </style>
+</head>
+<body>
+  <h1>💰 放置マネーゲーム</h1>
+  <p>所持金：<span id="money">0</span></p>
+  <p>1秒あたりの収入：<span id="rate">1</span></p>
+  <button onclick="upgrade()">強化する（コスト <span id="cost">10</span>）</button>
+  <br><br>
+  <button onclick="resetGame()" style="background:#f44336;">リセット</button>
+
+  <script>
+    let money = 0;
+    let incomePerSecond = 1;
+    let upgradeCost = 10;
+
+    // --- 表示更新 ---
+    function updateDisplay() {
+      document.getElementById("money").textContent = Math.floor(money);
+      document.getElementById("rate").textContent = incomePerSecond.toFixed(2);
+      document.getElementById("cost").textContent = Math.floor(upgradeCost);
+    }
+
+    // --- 強化処理 ---
+    function upgrade() {
+      if (money >= upgradeCost) {
+        money -= upgradeCost;
+        incomePerSecond *= 1.5;
+        upgradeCost *= 2;
+        saveGame();
+        updateDisplay();
+      }
+    }
+
+    // --- セーブ処理 ---
+    function saveGame() {
+      const saveData = {
+        money: money,
+        incomePerSecond: incomePerSecond,
+        upgradeCost: upgradeCost
+      };
+      localStorage.setItem("idleGameSave", JSON.stringify(saveData));
+    }
+
+    // --- ロード処理 ---
+    function loadGame() {
+      const saved = localStorage.getItem("idleGameSave");
+      if (saved) {
+        const data = JSON.parse(saved);
+        money = data.money || 0;
+        incomePerSecond = data.incomePerSecond || 1;
+        upgradeCost = data.upgradeCost || 10;
+      }
+    }
+
+    // --- リセット処理 ---
+    function resetGame() {
+      if (confirm("ゲームを最初からやり直しますか？")) {
+        localStorage.removeItem("idleGameSave");
+        money = 0;
+        incomePerSecond = 1;
+        upgradeCost = 10;
+        updateDisplay();
+      }
+    }
+
+    // --- 自動収入 ---
+    setInterval(() => {
+      money += incomePerSecond;
+      updateDisplay();
+    }, 1000);
+
+    // --- 自動セーブ（5秒ごと） ---
+    setInterval(saveGame, 5000);
+
+    // --- 初回読み込み時にロード ---
+    loadGame();
+    updateDisplay();
+  </script>
+</body>
+</html>
