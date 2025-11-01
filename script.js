@@ -55,9 +55,16 @@ function moveToPage() {
       const light = document.createElement('div');
       light.className = 'light';
 
-      // 中心からの初期オフセットをランダムに設定（例：-600px～600px）
-      const offsetX = random(-600, 600);
-      const offsetY = random(-600, 600);
+
+      // 画面サイズに応じて範囲を設定
+      const rangeX = window.innerWidth / 2;   // 横方向の範囲（画面の半分）
+      const rangeY = window.innerHeight / 2;  // 縦方向の範囲（画面の半分）
+
+      // ランダムに配置
+      const offsetX = random(-rangeX, rangeX);
+      const offsetY = random(-rangeY, rangeY);
+
+      // 中心からの初期オフセットをランダムに設定
       light.style.setProperty('--start-x', offsetX + 'px');
       light.style.setProperty('--start-y', offsetY + 'px');
 
