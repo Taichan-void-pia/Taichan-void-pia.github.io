@@ -1,7 +1,8 @@
 const areas = [
     {name: "Project-Nexus", img: "img/areaA.png", link: "https://nemonowa.github.io/"},
     {name: "LanahiroMOD", img: "img/areaB.png", link: "area2.html"},
-    {name: "Home", img: "img/areaC.png", link: "area3.html"}
+    {name: "Home", img: "img/areaC.png", link: "area3.html"},
+    {name: "IdleGame", img: "img/areaC.png", link: "page/idlegame.html"}
 ];
 
 let currentArea = 0;
