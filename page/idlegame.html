@@ -120,91 +120,53 @@
   <button class="reset-btn" onclick="resetGame()">リセット</button>
 
   <script>
-    let money = 0;
-    let incomePerSecond = 1;
-    let efficiency = 1;
-    let upgradeCostIncome = 10;
-    let upgradeCostEff = 25;
+let money = 0;
+let incomePerSecond = 1;   // 基本収入
+let efficiency = 1;        // 効率倍率
+let upgradeCostIncome = 10;
+let upgradeCostEff = 25;
 
-    function updateDisplay() {
-      document.getElementById("money").textContent = Math.floor(money);
-      document.getElementById("rate").textContent = Math.floor(incomePerSecond * efficiency);
-      document.getElementById("costIncome").textContent = Math.floor(upgradeCostIncome);
-      document.getElementById("costEff").textContent = Math.floor(upgradeCostEff);
-    }
+function updateDisplay() {
+  document.getElementById("money").textContent = Math.floor(money);
+  document.getElementById("rate").textContent = (incomePerSecond * efficiency).toFixed(2);
+  document.getElementById("costIncome").textContent = Math.floor(upgradeCostIncome);
+  document.getElementById("costEff").textContent = Math.floor(upgradeCostEff);
+}
 
-    function saveGame() {
-      const saveData = {
-        money, incomePerSecond, efficiency, upgradeCostIncome, upgradeCostEff
-      };
-      localStorage.setItem("idleGameSaveV3", JSON.stringify(saveData));
-    }
-
-    function loadGame() {
-      const saved = localStorage.getItem("idleGameSaveV3");
-      if (saved) {
-        const data = JSON.parse(saved);
-        money = data.money || 0;
-        incomePerSecond = data.incomePerSecond || 1;
-        efficiency = data.efficiency || 1;
-        upgradeCostIncome = data.upgradeCostIncome || 10;
-        upgradeCostEff = data.upgradeCostEff || 25;
-      }
-    }
-
-    function resetGame() {
-      if (confirm("最初からやり直しますか？")) {
-        localStorage.removeItem("idleGameSaveV3");
-        money = 0;
-        incomePerSecond = 1;
-        efficiency = 1;
-        upgradeCostIncome = 10;
-        upgradeCostEff = 25;
-        updateDisplay();
-      }
-    }
-
-    function upgradeIncome() {
-      if (money >= upgradeCostIncome) {
-        money -= upgradeCostIncome;
-        incomePerSecond *= 1.5;
-        upgradeCostIncome *= 2;
-        saveGame();
-        updateDisplay();
-      }
-    }
-
-    function upgradeEfficiency() {
-      if (money >= upgradeCostEff) {
-        money -= upgradeCostEff;
-        efficiency *= 1.2;
-        upgradeCostEff *= 2.5;
-        saveGame();
-        updateDisplay();
-      }
-    }
-
-    // --- 高速収入ループ ---
-    let remainder = 0;
-    setInterval(() => {
-      const totalPerSec = incomePerSecond * efficiency;
-      const perMs = totalPerSec / 1000;
-      remainder += perMs;
-      if (remainder >= 1) {
-        const add = Math.floor(remainder);
-        money += add;
-        remainder -= add;
-      }
-
-      // 👇 ← 表示更新を追加！（これがなかった）
-      updateDisplay();
-    }, 1);
-
-    // --- 自動セーブ ---
-    setInterval(saveGame, 5000);
-
-    loadGame();
+function upgradeIncome() {
+  if (money >= upgradeCostIncome) {
+    money -= upgradeCostIncome;
+    incomePerSecond *= 1.5;
+    upgradeCostIncome *= 2;
     updateDisplay();
-  </script>
+    saveGame();
+  }
+}
+
+function upgradeEfficiency() {
+  if (money >= upgradeCostEff) {
+    money -= upgradeCostEff;
+    efficiency *= 1.2;
+    upgradeCostEff *= 2.5;
+    updateDisplay();
+    saveGame();
+  }
+}
+
+// --- メインループ（30FPSで表示更新） ---
+let lastTime = Date.now();
+function gameLoop() {
+  const now = Date.now();
+  const delta = (now - lastTime) / 1000; // 経過秒数
+  lastTime = now;
+
+  money += incomePerSecond * efficiency * delta;
+
+  updateDisplay();
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
 </body>
 </html>
