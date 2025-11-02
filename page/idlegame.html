@@ -1,201 +1,273 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>💰 放置マネーゲーム Rebirth Edition</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: 'Segoe UI', sans-serif;
-      background: radial-gradient(circle at center, #101010 0%, #000 100%);
-      color: #fff;
-      text-align: center;
-    }
-    h1 {
-      margin-top: 30px;
-      color: #00e676;
-      text-shadow: 0 0 10px #00e676;
-    }
-    .stats {
-      margin: 20px auto;
-      background: rgba(255,255,255,0.05);
-      padding: 15px 30px;
-      border-radius: 12px;
-      display: inline-block;
-    }
-    .money { font-size: 1.8em; color: #00e676; font-weight: bold; }
-    .upgrade-container {
-      display: flex; flex-wrap: wrap;
-      justify-content: center; gap: 20px; margin-top: 30px;
-    }
-    .upgrade-card {
-      background: rgba(255,255,255,0.08);
-      border-radius: 12px; width: 240px; padding: 15px;
-      box-shadow: 0 0 8px rgba(0,0,0,0.4);
-      transition: 0.3s;
-    }
-    .upgrade-card:hover { transform: translateY(-4px); box-shadow: 0 0 20px rgba(0,255,100,0.4); }
-    button {
-      margin-top: 10px;
-      background: linear-gradient(90deg, #00e676, #00bfa5);
-      border: none; border-radius: 8px; padding: 8px 15px;
-      color: white; font-size: 1em; cursor: pointer; width: 100%;
-    }
-    button:hover { transform: scale(1.05); }
-    .reset-btn {
-      margin-top: 40px; background: #f44336;
-    }
-    .prestige {
-      margin-top: 40px;
-      background: linear-gradient(90deg, #ffca28, #f57f17);
-      border: none; border-radius: 10px; padding: 15px 30px;
-      color: #000; font-size: 1.2em; cursor: pointer;
-    }
-    .prestige:disabled { background: #555; color: #ccc; cursor: not-allowed; }
-    .prestige-upgrades {
-      margin-top: 40px;
-      background: rgba(255,255,255,0.05);
-      border-radius: 16px;
-      padding: 20px;
-      width: 90%;
-      margin-left: auto;
-      margin-right: auto;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>💰 放置マネーゲーム ∞Rebirth Edition (Debug)</title>
+<style>
+  body { margin:0; font-family:'Segoe UI',sans-serif; background:radial-gradient(circle,#0b0b0b,#000); color:#fff; text-align:center; }
+  h1 { margin-top:30px; color:#00e676; text-shadow:0 0 10px #00e676; }
+  .stats { margin:20px auto; background:rgba(255,255,255,0.05); padding:15px 30px; border-radius:12px; display:inline-block; }
+  .money { font-size:1.8em; color:#00e676; font-weight:bold; }
+  .meter { margin:10px auto; width:300px; height:20px; background:rgba(255,255,255,0.1); border-radius:10px; overflow:hidden; }
+  .fill { height:100%; width:0%; background:linear-gradient(90deg,#00e676,#00bfa5); border-radius:10px; transition:width 0.2s linear; }
+  .upgrade-container { display:flex; flex-wrap:wrap; justify-content:center; gap:20px; margin-top:30px; }
+  .upgrade-card { background:rgba(255,255,255,0.08); border-radius:12px; width:240px; padding:15px; box-shadow:0 0 8px rgba(0,0,0,0.4); transition:0.3s; }
+  .upgrade-card:hover { transform:translateY(-4px); box-shadow:0 0 20px rgba(0,255,100,0.4); }
+  button { margin-top:10px; background:linear-gradient(90deg,#00e676,#00bfa5); border:none; border-radius:8px; padding:8px 15px; color:white; font-size:1em; cursor:pointer; width:100%; }
+  button:hover { transform:scale(1.03); }
+  .prestige { margin-top:40px; background:linear-gradient(90deg,#ffca28,#f57f17); border:none; border-radius:10px; padding:15px 30px; color:#000; font-size:1.2em; cursor:pointer; }
+  .prestige:disabled { background:#555; color:#ccc; cursor:not-allowed; }
+  .prestige-upgrades { margin-top:40px; background:rgba(255,255,255,0.05); border-radius:16px; padding:20px; width:90%; margin-left:auto; margin-right:auto; }
+  .reset-btn { margin-top:40px; background:#f44336; border:none; border-radius:8px; padding:10px 20px; color:white; font-size:1em; cursor:pointer; }
+  /* DEBUG panel */
+  #debugPanel { margin:20px auto; width:90%; max-width:720px; background:rgba(255,255,255,0.03); border-radius:10px; padding:12px; text-align:left; box-shadow:0 0 10px rgba(255,255,255,0.02); }
+  #debugPanel input[type="text"] { width:200px; padding:6px; border-radius:6px; border:1px solid rgba(255,255,255,0.08); background:rgba(0,0,0,0.4); color:#fff; }
+  #debugPanel .small { font-size:0.9em; color:#ccc; }
+</style>
 </head>
 <body>
-  <h1>💰 放置マネーゲーム Rebirth Edition</h1>
+  <h1>💰 放置マネーゲーム ∞Rebirth Edition (Debug)</h1>
   <div class="stats">
     <div>所持金：<span class="money" id="money">0</span></div>
     <div>1秒あたりの収入：<span id="rate">1</span></div>
+    <div class="meter"><div class="fill" id="fill"></div></div>
     <div>転生ポイント：<span id="prestigePoints">0</span></div>
   </div>
 
   <div class="upgrade-container" id="upgradeList"></div>
-
   <button id="prestigeBtn" class="prestige" disabled onclick="doPrestige()">✨ 転生する</button>
+
   <div class="prestige-upgrades">
     <h3>🌟 転生アップグレード</h3>
-    <div>転生倍率アップ：<span id="prestigeMultLevel">0</span> Lv （コスト1）<button onclick="buyPrestigeUpgrade('mult')">購入</button></div>
-    <div>強化コスト効率化：<span id="prestigeEffLevel">0</span> Lv （コスト2）<button onclick="buyPrestigeUpgrade('eff')">購入</button></div>
+    <div>転生倍率アップ：<span id="prestigeMultLevel">0</span> Lv（コスト1）<button onclick="buyPrestigeUpgrade('mult')">購入</button></div>
+    <div>強化コスト効率化：<span id="prestigeEffLevel">0</span> Lv（コスト2）<button onclick="buyPrestigeUpgrade('eff')">購入</button></div>
   </div>
 
   <button class="reset-btn" onclick="resetGame()">リセット</button>
 
-  <script>
-    let money = 0;
-    let incomePerSecond = 1;
-    let efficiency = 1;
-    let prestigePoints = 0;
-    let prestigeMultiplier = 1;
-    let prestigeEffReduction = 1;
-    let upgrades = [
-      { name: "収入アップ", desc: "基本収入を上げます", baseCost: 10, level: 0, effect: () => incomePerSecond *= 1.5 },
-      { name: "効率アップ", desc: "収入倍率を上げます", baseCost: 25, level: 0, effect: () => efficiency *= 1.2 },
-      { name: "自動販売機", desc: "収入を大きくアップ", baseCost: 100, level: 0, effect: () => incomePerSecond *= 2 },
-      { name: "銀行投資", desc: "長期的な収入効率UP", baseCost: 500, level: 0, effect: () => efficiency *= 1.5 },
-      { name: "AI生成工場", desc: "超高速収入システム", baseCost: 2000, level: 0, effect: () => incomePerSecond *= 3 },
-    ];
+  <!-- --- DEBUG PANEL --- -->
+  <div id="debugPanel">
+    <div class="small">デバッグ操作（テスト用）</div>
+    <div style="margin-top:8px;">
+      <label>所持金をセット：<input id="dbgMoney" type="text" placeholder="例: 100000 or 1.8e308"></label>
+      <button onclick="dbgSetMoney()">セット</button>
+    </div>
+    <div style="margin-top:8px;">
+      <label>転生ポイントをセット：<input id="dbgPrestige" type="text" placeholder="例: 1"></label>
+      <button onclick="dbgSetPrestige()">セット</button>
+    </div>
+    <div style="margin-top:8px;">
+      <label><input id="dbgBypassConfirm" type="checkbox"> 確認ダイアログを無効（危険）</label>
+    </div>
+    <div style="margin-top:8px;">
+      <button style="background:#ff1744;" onclick="dbgForcePrestige()">強制転生（即時）</button>
+      <span class="small" style="margin-left:8px;">（force=true で転生条件を無視して転生を実行）</span>
+    </div>
+    <div style="margin-top:8px;" class="small">または URL に <code>?forcePrestige=1</code> を付けて読み込むと即時転生が実行されます。</div>
+  </div>
 
-    function getUpgradeCost(u) {
-      return Math.floor(u.baseCost * Math.pow(1.7, u.level) / prestigeEffReduction);
-    }
+<script>
+  // ---------- game state ----------
+  let money = 0;
+  let incomePerSecond = 1;
+  let efficiency = 1;
+  let prestigePoints = 0;
+  let prestigeMultiplier = 1;
+  let prestigeEffReduction = 1;
+  let upgrades = [
+    { name:"収入アップ", desc:"基本収入を少し上げます", baseCost:10, level:0, power:1.2 },
+    { name:"効率アップ", desc:"収入倍率を強化", baseCost:50, level:0, power:1.1 },
+    { name:"自動販売機", desc:"定期収入を増やす", baseCost:200, level:0, power:1.3 },
+    { name:"銀行投資", desc:"効率を向上", baseCost:1000, level:0, power:1.25 },
+    { name:"AI生成工場", desc:"莫大な収入を得る", baseCost:5000, level:0, power:1.4 },
+  ];
 
-    function updateDisplay() {
-      document.getElementById("money").textContent = Math.floor(money);
-      document.getElementById("rate").textContent = (incomePerSecond * efficiency * prestigeMultiplier).toFixed(2);
-      document.getElementById("prestigePoints").textContent = prestigePoints;
-      document.getElementById("prestigeMultLevel").textContent = prestigeMultiplier - 1;
-      document.getElementById("prestigeEffLevel").textContent = (prestigeEffReduction - 1).toFixed(1);
+  // ---------- helpers ----------
+  function formatNum(num) {
+    if (typeof num !== 'number') return String(num);
+    if (!isFinite(num)) return "Infinity";
+    if (num >= 1e9) return num.toExponential(2);
+    return Math.floor(num).toLocaleString();
+  }
 
-      document.getElementById("upgradeList").innerHTML = "";
-      upgrades.forEach((u, i) => {
-        const div = document.createElement("div");
-        div.className = "upgrade-card";
-        div.innerHTML = `
-          <h3>${u.name}</h3>
-          <p>${u.desc}</p>
-          <p>Lv ${u.level}</p>
-          <button onclick="buyUpgrade(${i})">購入（${getUpgradeCost(u)}）</button>
-        `;
-        document.getElementById("upgradeList").appendChild(div);
-      });
+  function getUpgradeCost(u) {
+    return Math.floor(u.baseCost * Math.pow(2.2, u.level) / prestigeEffReduction);
+  }
 
-      document.getElementById("prestigeBtn").disabled = money < 100000;
-    }
-
-    function buyUpgrade(i) {
-      const u = upgrades[i];
-      const cost = getUpgradeCost(u);
-      if (money >= cost) {
-        money -= cost;
-        u.level++;
-        u.effect();
-        updateDisplay();
-        saveGame();
-      }
-    }
-
-    function buyPrestigeUpgrade(type) {
-      if (type === "mult" && prestigePoints >= 1) {
-        prestigePoints -= 1;
-        prestigeMultiplier += 1;
-      } else if (type === "eff" && prestigePoints >= 2) {
-        prestigePoints -= 2;
-        prestigeEffReduction += 0.2;
-      }
+  // ---------- purchases ----------
+  function buyUpgrade(i) {
+    const u = upgrades[i];
+    const cost = getUpgradeCost(u);
+    if (money >= cost) {
+      money -= cost;
+      u.level++;
+      // バランス調整済み（控えめに）
+      incomePerSecond *= u.power;
+      efficiency *= (1 + (u.power - 1) / 10);
       updateDisplay();
       saveGame();
+    } else {
+      alert("お金が足りません。");
     }
+  }
 
-    function doPrestige() {
-      if (money < 100000) return;
-      const earned = Math.floor(Math.log10(money) - 4);
-      prestigePoints += earned;
-      money = 0;
-      incomePerSecond = 1;
-      efficiency = 1;
-      upgrades.forEach(u => u.level = 0);
-      updateDisplay();
-      saveGame();
+  function buyPrestigeUpgrade(type) {
+    if (type === "mult" && prestigePoints >= 1) {
+      prestigePoints -= 1;
+      prestigeMultiplier += 1;
+    } else if (type === "eff" && prestigePoints >= 2) {
+      prestigePoints -= 2;
+      prestigeEffReduction += 0.2;
+    } else {
+      alert("転生ポイントが足りません。");
+      return;
     }
-
-    function resetGame() {
-      if (confirm("全てをリセットしますか？")) {
-        localStorage.removeItem("idleRebirthSave");
-        location.reload();
-      }
-    }
-
-    function saveGame() {
-      const save = {
-        money, incomePerSecond, efficiency,
-        prestigePoints, prestigeMultiplier, prestigeEffReduction, upgrades
-      };
-      localStorage.setItem("idleRebirthSave", JSON.stringify(save));
-    }
-
-    function loadGame() {
-      const data = JSON.parse(localStorage.getItem("idleRebirthSave") || "{}");
-      Object.assign(window, data);
-      if (!upgrades) upgrades = [];
-    }
-
-    loadGame();
-
-    // --- メインループ ---
-    let last = Date.now();
-    function loop() {
-      const now = Date.now();
-      const delta = (now - last) / 1000;
-      last = now;
-      money += incomePerSecond * efficiency * prestigeMultiplier * delta;
-      updateDisplay();
-      requestAnimationFrame(loop);
-    }
-
     updateDisplay();
-    loop();
-  </script>
+    saveGame();
+  }
+
+  // ---------- prestige (転生) ----------
+  // force=true のときは money 条件を無視して強制転生（デバッグ用）
+  function doPrestige(force = false) {
+    // 確認ダイアログ（デバッグパネルで無効化できる）
+    const noConfirm = document.getElementById("dbgBypassConfirm")?.checked;
+    if (!noConfirm && !force) {
+      if (!confirm("本当に転生しますか？（所持金・アップグレードがリセットされます）")) return;
+    }
+    if (!force && (money < 1.8e308)) {
+      alert("転生条件に達していません。（通常は 1.8e308）");
+      return;
+    }
+
+    // 通常は1ポイント（ユーザー要望どおり）
+    prestigePoints += 1;
+    // リセット
+    money = 0;
+    incomePerSecond = 1;
+    efficiency = 1;
+    upgrades.forEach(u => u.level = 0);
+    updateDisplay();
+    saveGame();
+    if (force) alert("強制転生を実行しました（デバッグ）。転生ポイント +1");
+    else alert("🌌 宇宙の限界を超えた！ 転生ポイント +1");
+  }
+
+  // ---------- save/load ----------
+  function saveGame() {
+    try {
+      const save = { money, incomePerSecond, efficiency, prestigePoints, prestigeMultiplier, prestigeEffReduction, upgrades };
+      localStorage.setItem("idleInfinitySave_debug", JSON.stringify(save));
+    } catch (e) { console.warn("save failed", e); }
+  }
+
+  function loadGame() {
+    try {
+      const data = JSON.parse(localStorage.getItem("idleInfinitySave_debug") || "{}");
+      // 安全に割り当て（存在するものだけ）
+      if (typeof data.money === 'number') money = data.money;
+      if (typeof data.incomePerSecond === 'number') incomePerSecond = data.incomePerSecond;
+      if (typeof data.efficiency === 'number') efficiency = data.efficiency;
+      if (typeof data.prestigePoints === 'number') prestigePoints = data.prestigePoints;
+      if (typeof data.prestigeMultiplier === 'number') prestigeMultiplier = data.prestigeMultiplier;
+      if (typeof data.prestigeEffReduction === 'number') prestigeEffReduction = data.prestigeEffReduction;
+      if (Array.isArray(data.upgrades) && data.upgrades.length === upgrades.length) {
+        upgrades = data.upgrades;
+      }
+    } catch(e){ console.warn("load failed", e); }
+  }
+
+  // ---------- UI ----------
+  function updateDisplay() {
+    const totalRate = incomePerSecond * efficiency * prestigeMultiplier;
+    document.getElementById("money").textContent = formatNum(money);
+    document.getElementById("rate").textContent = formatNum(totalRate);
+    document.getElementById("prestigePoints").textContent = prestigePoints;
+    document.getElementById("prestigeMultLevel").textContent = prestigeMultiplier - 1;
+    document.getElementById("prestigeEffLevel").textContent = (prestigeEffReduction - 1).toFixed(1);
+
+    // upgrade list
+    const list = document.getElementById("upgradeList");
+    list.innerHTML = "";
+    upgrades.forEach((u, i) => {
+      const div = document.createElement("div");
+      div.className = "upgrade-card";
+      div.innerHTML = `
+        <h3>${u.name}</h3>
+        <p>${u.desc}</p>
+        <p>Lv ${u.level}</p>
+        <button onclick="buyUpgrade(${i})">購入（${formatNum(getUpgradeCost(u))}）</button>
+      `;
+      list.appendChild(div);
+    });
+
+    // prestige button (通常は超インフレ条件)
+    document.getElementById("prestigeBtn").disabled = !(money >= 1.8e308);
+
+    // meter: 0..100% per 1000 currency (arbitrary visual)
+    const fill = document.getElementById("fill");
+    let percent = 0;
+    if (isFinite(money)) {
+      percent = Math.min((money % 1000) / 1000 * 100, 100);
+    } else {
+      percent = 100;
+    }
+    fill.style.width = percent + "%";
+  }
+
+  // ---------- DEBUG helpers ----------
+  function dbgSetMoney() {
+    const v = document.getElementById("dbgMoney").value.trim();
+    if (!v) { alert("値を入力してください"); return; }
+    // allow scientific notation like "1.8e308"
+    const num = Number(v);
+    if (!isFinite(num) && v.toLowerCase().includes("e")) {
+      // try parsing big exponent via parseFloat (Number already)
+    }
+    money = num;
+    updateDisplay();
+    saveGame();
+  }
+  function dbgSetPrestige() {
+    const v = document.getElementById("dbgPrestige").value.trim();
+    const n = parseInt(v) || 0;
+    prestigePoints = n;
+    updateDisplay();
+    saveGame();
+  }
+  function dbgForcePrestige() {
+    if (!document.getElementById("dbgBypassConfirm").checked) {
+      if (!confirm("強制転生しますか？（デバッグ・元に戻せません）")) return;
+    }
+    doPrestige(true);
+  }
+
+  // ---------- main loop ----------
+  loadGame();
+
+  // check URL params for debug
+  const params = new URLSearchParams(location.search);
+  if (params.get("money")) {
+    const m = Number(params.get("money"));
+    if (isFinite(m)) { money = m; }
+    else if (params.get("money").toLowerCase().includes("e")) money = Number(params.get("money"));
+  }
+  // if forcePrestige param present, do immediate forced prestige
+  if (params.get("forcePrestige") === "1" || params.get("forcePrestige") === "true") {
+    // small timeout so UI loads then run
+    setTimeout(() => { doPrestige(true); }, 200);
+  }
+
+  let last = Date.now();
+  function loop() {
+    const now = Date.now();
+    const delta = (now - last) / 1000;
+    last = now;
+    money += incomePerSecond * efficiency * prestigeMultiplier * delta;
+    updateDisplay();
+    requestAnimationFrame(loop);
+  }
+  updateDisplay();
+  loop();
+</script>
 </body>
 </html>
