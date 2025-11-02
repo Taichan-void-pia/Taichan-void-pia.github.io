@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — All BigNum Version</title>
+<title>Idle — All BigNum (修正版)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -24,7 +24,7 @@
 <body>
   <div id="error" class="errorBanner"></div>
 
-  <h1>💰 放置ゲーム</h1>
+  <h1>💰 放置ゲーム — All BigNum 修正版</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
@@ -47,6 +47,7 @@
 
 <script>
 (function(){
+  // エラー表示ユーティリティ
   function showError(msg){
     const el = document.getElementById('error');
     el.style.display = 'block';
@@ -86,7 +87,6 @@
         let sign = this.m < 0 ? -1 : 1;
         let mabs = Math.abs(this.m);
         if (mabs === 0){ this.m = 0; this.e = 0; return; }
-        // shift so that mabs in [1,10)
         const shift = Math.floor(Math.log10(mabs));
         if (isFinite(shift) && shift !== 0){
           mabs = mabs / Math.pow(10, shift);
@@ -112,8 +112,6 @@
         }
         return this.m.toFixed(3) + "e" + this.e;
       }
-
-      // add in place (other can be BigNum or number)
       addInPlace(other){
         if (typeof other === 'number') other = BigNum.fromNumber(other);
         if (!(other instanceof BigNum)) return;
@@ -134,15 +132,12 @@
         }
         this._normalize();
       }
-      // subtract other (BigNum or number) in place
       subInPlace(other){
         if (typeof other === 'number') other = BigNum.fromNumber(other);
         if (!(other instanceof BigNum)) return;
-        // negate other and add
         other = new BigNum(-other.m, other.e);
         this.addInPlace(other);
       }
-      // multiply in place by BigNum or number
       mulInPlace(other){
         if (typeof other === 'number') {
           if (!isFinite(other) || other === 0){ this.m = 0; this.e = 0; return; }
@@ -155,16 +150,13 @@
         this.e = this.e + other.e;
         this._normalize();
       }
-      // multiply by a JS number scalar (fast path)
       mulByNumber(n){
         if (typeof n !== 'number') return;
         if (!isFinite(n) || n === 0){ this.m = 0; this.e = 0; return; }
         this.m = this.m * n;
         this._normalize();
       }
-      // add a JS number directly
       addNumber(n){ this.addInPlace(BigNum.fromNumber(n)); }
-      // compare >= with number
       gteNumber(n){
         if (typeof n !== 'number') n = Number(n);
         if (!isFinite(n)) return false;
@@ -172,7 +164,6 @@
         const bn = BigNum.fromNumber(n);
         return this.gteBig(bn);
       }
-      // compare big >= big
       gteBig(b){
         if (!(b instanceof BigNum)) b = BigNum.fromObject(b);
         if (this.m === 0 && b.m === 0) return true;
@@ -205,21 +196,19 @@
     function cloneTemplate(){ return JSON.parse(JSON.stringify(upgradesTemplate)); }
 
     // -----------------------
-    // game state (BigNum for big values)
+    // game state
     // -----------------------
     let money = BigNum.zero();
     let baseIncome = BigNum.fromNumber(1);
     let upgrades = cloneTemplate();
     let prestigePoints = BigNum.fromNumber(0);
-    let prestigeCount = 0; // small integer
+    let prestigeCount = 0;
     let prestigeMult = BigNum.fromNumber(1);
     let lastGlobalPrestigeScore = BigNum.zero();
 
-    // display smoothing (numeric) and progress arrays (progress remains number for interpolation)
     let displayMoneyNum = 0;
     const prevProgress = new Array(upgrades.length).fill(0);
     const currProgress = new Array(upgrades.length).fill(0);
-
     const upgradeUI = [];
 
     // helpers
@@ -234,7 +223,6 @@
       return String(n);
     }
 
-    // sanitize loaded upgrades -> convert rate/mult/baseCost etc to BigNum as needed
     function sanitizeUpgrades(list){
       for (let i=0;i<list.length;i++){
         const u = list[i];
@@ -246,19 +234,13 @@
         if (typeof u.progress !== 'number') u.progress = 0;
         if (!u.prestigeLevel || typeof u.prestigeLevel !== 'object') u.prestigeLevel = {mult:0,rate:0,cost:0};
         if (typeof u.ascendCount !== 'number') u.ascendCount = 0;
-        // wrap numeric fields into BigNum objects where appropriate
-        u._rateBN = BigNum.fromNumber(u.rate);
-        u._multBN = BigNum.fromNumber(u.mult);
-        u._baseCostBN = BigNum.fromNumber(u.baseCost);
-        // keep u.rate/u.mult as sources for legacy but primarily use _rateBN/_multBN/_baseCostBN
-        u.rate = u.rate;
-        u.mult = u.mult;
-        u.baseCost = u.baseCost;
+        u._rateBN = u._rateBN ? BigNum.fromObject(u._rateBN) : BigNum.fromNumber(u.rate);
+        u._multBN = u._multBN ? BigNum.fromObject(u._multBN) : BigNum.fromNumber(u.mult);
+        u._baseCostBN = u._baseCostBN ? BigNum.fromObject(u._baseCostBN) : BigNum.fromNumber(u.baseCost);
       }
     }
 
     function getUpgradeCostBig(u, extraLevelOffset=0){
-      // compute baseCostBN * (level+1+offset)^COST_POW * reduction
       const level = (u.level + extraLevelOffset);
       const scalar = Math.pow(Math.max(1, level + 1), COST_POW);
       const reduction = 1 - 0.03 * ((u.prestigeLevel && u.prestigeLevel.cost) || 0);
@@ -268,7 +250,6 @@
       return c;
     }
 
-    // UI init (safe formatting)
     function initUI(){
       const container = document.getElementById('upgradeContainer');
       container.innerHTML = '';
@@ -316,50 +297,42 @@
       });
     }
 
-    // throttled UI update
-    let lastUI=0;
+    let lastUI = 0;
     function updateUI_throttled(force){
       const now = performance.now();
       if (!force && now - lastUI < 100) return;
       lastUI = now;
 
-      // compute total multiplier as BigNum product
+      // compute total multiplier product
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
         const pMult = 0.02 * ((u.prestigeLevel && u.prestigeLevel.mult) || 0);
         const asc = 0.05 * (u.ascendCount || 0);
-
-        // factor = 1 + u.mult + pMult + asc
         const factorBN = BigNum.fromNumber(1);
         factorBN.addInPlace(u._multBN);
         factorBN.addNumber(pMult + asc);
-        // multiply into totalMultBN
         totalMultBN.mulInPlace(factorBN);
       }
-      // rate display: baseIncome * totalMultBN
+
       const rateBN = baseIncome.clone();
       rateBN.mulInPlace(totalMultBN);
       const rateDisplay = rateBN.toNumberSafe();
       document.getElementById('rate').textContent = isFinite(rateDisplay) ? rateDisplay.toFixed(2) : rateBN.toString();
 
-      // formula string (approx)
       let formulaParts = upgrades.map(u=>{
-        const part = 1 + (u._multBN ? (u._multBN.toNumberSafe && isFinite(u._multBN.toNumberSafe()) ? u._multBN.toNumberSafe() : 0) : 0)
-                   + 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0);
+        const n = (u._multBN && u._multBN.toNumberSafe && isFinite(u._multBN.toNumberSafe())) ? u._multBN.toNumberSafe() : 0;
+        const part = 1 + n + 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0);
         return '(1+' + part.toFixed(3) + ')';
       });
       document.getElementById('formula').textContent = '収入 = baseIncome × ' + formulaParts.join(' × ');
 
-      // per-upgrade UI
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i], ui = upgradeUI[i];
         if (!ui) continue;
         ui.lvlEl.textContent = u.level;
-        // cost shown as BigNum string
-        const costBN = getUpgradeCostBig(u, 0);
-        ui.costEl.textContent = costBN.toString();
-        const multNum = u._multBN.toNumberSafe(); // might be Infinity
+        ui.costEl.textContent = getUpgradeCostBig(u,0).toString();
+        const multNum = u._multBN.toNumberSafe();
         ui.multEl.textContent = '+' + (isFinite(multNum) ? multNum.toFixed(3) : u._multBN.toString());
         const rateNum = u._rateBN.toNumberSafe();
         ui.rateEl.textContent = isFinite(rateNum) ? rateNum.toFixed(2) : u._rateBN.toString();
@@ -370,15 +343,13 @@
         ui.btnAsc.disabled = !(u.level >= 100 * ((u.ascendCount || 0) + 1));
       }
 
-      // global prestige enable (compare BigNum)
       const gbtn = document.getElementById('globalPrestigeBtn');
       gbtn.disabled = !money.gteNumber(1e20);
       const autoToggle = document.getElementById('autoToggle');
       if (prestigeCount < 1) { autoToggle.checked=false; autoToggle.disabled=true; } else autoToggle.disabled=false;
     }
 
-    // costToBuy returns BigNum total cost
-    function costToBuyBig(u, n){
+    function costToBuyBig(u,n){
       if (n <= 0) return BigNum.zero();
       let total = BigNum.zero();
       for (let k=0;k<n;k++){
@@ -415,11 +386,9 @@
     function doPurchase(u, idx, n){
       const costBN = costToBuyBig(u, n);
       money.subInPlace(costBN);
-      // rate growth (u._rateBN is BigNum)
-      const exponent = n * 0.1; // gentle
+      const exponent = n * 0.1;
       const multiplier = Math.pow(Math.max(1, u.speedMult), exponent);
       u._rateBN.mulByNumber(multiplier);
-      // clamp rate if needed (approx)
       if (u._rateBN.e > 300) u._rateBN = BigNum.fromNumber(1e300);
       u.level += n;
       saveGame();
@@ -437,7 +406,6 @@
       if (u.level < need){ alert('必要Lvが足りません: ' + need); return; }
       if (!confirm(u.name + ' を昇天しますか？')) return;
       u.ascendCount = (u.ascendCount || 0) + 1;
-      // Reset level/progress/rate/mult as requested
       u.level = 0;
       u.progress = 0;
       u._rateBN = BigNum.fromNumber(u.baseRate || 1);
@@ -447,7 +415,6 @@
       alert(u.name + ' を昇天しました（昇天回数: ' + u.ascendCount + '）');
     }
 
-    // global prestige
     function doGlobalPrestige(force){
       if (!force){
         if (!money.gteNumber(1e20)){ alert('グローバル転生条件: スコア >= 1e20'); return; }
@@ -461,7 +428,6 @@
       prestigeCount += 1;
       prestigeMult.mulByNumber(extra);
       lastGlobalPrestigeScore = BigNum.fromNumber(scoreNum);
-      // reset
       money = BigNum.zero();
       upgrades.forEach(u => { u.level = 0; u.progress = 0; u._rateBN = BigNum.fromNumber(u.baseRate || 1); u._multBN = BigNum.zero(); });
       initUI();
@@ -470,15 +436,14 @@
       alert('グローバル転生完了: prestigePoints +1, 収入倍率 ×' + extra.toFixed(2));
     }
 
-    // auto-buy (compare costs with BigNum)
+    // Auto-buy
     setInterval(function(){
       try {
         const autoOn = document.getElementById('autoToggle').checked && prestigeCount >= 1;
         if (!autoOn) return;
         const qty = document.getElementById('autoQty').value;
         const order = upgrades.map((u,i)=>({i,c:getUpgradeCostBig(u)})).sort((a,b)=>{
-          // compare BigNum a.c vs b.c
-          if (a.c.e !== b.c.e) return b.c.e - a.c.e;
+          if (a.c.e !== b.c.e) return a.c.e - b.c.e;
           return Math.abs(a.c.m) - Math.abs(b.c.m);
         });
         for (let k=0;k<order.length;k++){
@@ -491,7 +456,7 @@
       } catch(e){ console.warn('auto-buy error', e); }
     }, 900);
 
-    // save/load (serialize BigNum fields)
+    // --- save/load with robust guards ---
     function saveGame(){
       try {
         const save = {
@@ -500,15 +465,14 @@
           upgrades: upgrades.map(u => ({
             name:u.name,
             baseRate:u.baseRate,
-            // numeric fields stored as numbers for compatibility but also store BN objects
             rateBN: u._rateBN.toObject(),
             multBN: u._multBN.toObject(),
             baseCostBN: u._baseCostBN.toObject(),
             baseCost: u.baseCost,
             level: u.level,
             progress: u.progress,
-            prestigeLevel: u.prestigeLevel,
-            ascendCount: u.ascendCount
+            prestigeLevel: u.prestigeLevel || {mult:0,rate:0,cost:0},
+            ascendCount: u.ascendCount || 0
           })),
           prestigePoints: prestigePoints.toObject(),
           prestigeCount,
@@ -516,61 +480,72 @@
           lastGlobalPrestigeScore: lastGlobalPrestigeScore.toObject()
         };
         localStorage.setItem('idle_all_big_save', JSON.stringify(save));
-      } catch(e){ console.warn('save fail', e); }
+      } catch(e){
+        console.warn('save fail', e);
+        try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
+      }
     }
+
     function loadGame(){
       try {
         const raw = localStorage.getItem('idle_all_big_save');
         if (!raw) return;
-        const data = JSON.parse(raw);
-        if (data && typeof data === 'object'){
-          if (data.money) money = BigNum.fromObject(data.money);
-          if (data.baseIncome) baseIncome = BigNum.fromObject(data.baseIncome);
-          if (Array.isArray(data.upgrades) && data.upgrades.length === upgradesTemplate.length){
-            upgrades = data.upgrades.map((s, i) => {
-              // merge with template for missing fields
-              const t = JSON.parse(JSON.stringify(upgradesTemplate[i]));
-              const merged = Object.assign(t, s);
-              // convert BN fields
-              merged._rateBN = s.rateBN ? BigNum.fromObject(s.rateBN) : BigNum.fromNumber(merged.rate);
-              merged._multBN = s.multBN ? BigNum.fromObject(s.multBN) : BigNum.fromNumber(merged.mult);
-              merged._baseCostBN = s.baseCostBN ? BigNum.fromObject(s.baseCostBN) : BigNum.fromNumber(merged.baseCost);
-              return merged;
-            });
-          }
-          if (data.prestigePoints) prestigePoints = BigNum.fromObject(data.prestigePoints);
-          if (typeof data.prestigeCount === 'number') prestigeCount = data.prestigeCount;
-          if (data.prestigeMult) prestigeMult = BigNum.fromObject(data.prestigeMult);
-          if (data.lastGlobalPrestigeScore) lastGlobalPrestigeScore = BigNum.fromObject(data.lastGlobalPrestigeScore);
+        let data;
+        try { data = JSON.parse(raw); } catch(parseErr){
+          console.warn('save JSON parse failed, clearing it', parseErr);
+          localStorage.removeItem('idle_all_big_save');
+          return;
         }
-        // ensure all upgrades have BN fields
-        for (let i=0;i<upgrades.length;i++){
-          const u = upgrades[i];
-          if (!u._rateBN) u._rateBN = BigNum.fromNumber(u.rate || u.baseRate || 1);
-          if (!u._multBN) u._multBN = BigNum.fromNumber(u.mult || 0);
-          if (!u._baseCostBN) u._baseCostBN = BigNum.fromNumber(u.baseCost || upgradesTemplate[i].baseCost);
+        if (!data || typeof data !== 'object') return;
+
+        if (data.money && typeof data.money.m === 'number') money = BigNum.fromObject(data.money);
+        if (data.baseIncome && typeof data.baseIncome.m === 'number') baseIncome = BigNum.fromObject(data.baseIncome);
+
+        if (Array.isArray(data.upgrades) && data.upgrades.length === upgradesTemplate.length){
+          upgrades = data.upgrades.map((s,i) => {
+            const t = JSON.parse(JSON.stringify(upgradesTemplate[i]));
+            const merged = Object.assign(t, s);
+            merged._rateBN = (s && s.rateBN) ? BigNum.fromObject(s.rateBN) : BigNum.fromNumber(merged.rate || merged.baseRate || 1);
+            merged._multBN = (s && s.multBN) ? BigNum.fromObject(s.multBN) : BigNum.fromNumber(merged.mult || 0);
+            merged._baseCostBN = (s && s.baseCostBN) ? BigNum.fromObject(s.baseCostBN) : BigNum.fromNumber(merged.baseCost || upgradesTemplate[i].baseCost);
+            merged.level = Number.isFinite(+merged.level) ? Math.max(0, Math.floor(+merged.level)) : 0;
+            merged.progress = Number.isFinite(+merged.progress) ? +merged.progress : 0;
+            merged.prestigeLevel = merged.prestigeLevel || {mult:0,rate:0,cost:0};
+            merged.ascendCount = Number.isFinite(+merged.ascendCount) ? +merged.ascendCount : 0;
+            return merged;
+          });
         }
-      } catch(e){ console.warn('load fail', e); }
+
+        if (data.prestigePoints && typeof data.prestigePoints.m === 'number') prestigePoints = BigNum.fromObject(data.prestigePoints);
+        if (typeof data.prestigeCount === 'number') prestigeCount = data.prestigeCount;
+        if (data.prestigeMult && typeof data.prestigeMult.m === 'number') prestigeMult = BigNum.fromObject(data.prestigeMult);
+        if (data.lastGlobalPrestigeScore && typeof data.lastGlobalPrestigeScore.m === 'number') lastGlobalPrestigeScore = BigNum.fromObject(data.lastGlobalPrestigeScore);
+
+        sanitizeUpgrades(upgrades);
+      } catch(e){
+        console.warn('loadGame failed unexpectedly, clearing save and continuing', e);
+        try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
+      }
     }
 
-    // fixed step simulation + interpolation
+    // init
     sanitizeUpgrades(upgrades);
     initUI();
     loadGame();
     updateUI_throttled(true);
-
     for (let i=0;i<upgrades.length;i++){ prevProgress[i]=upgrades[i].progress; currProgress[i]=upgrades[i].progress; }
 
+    // simulation + render
     const FIXED_DT = 0.05;
     let accumulator = 0;
     let lastTime = performance.now();
 
     function simulateStep(dt){
-      // progress (numbers) and mult (BigNum)
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
         prevProgress[i] = currProgress[i];
-        const incProg = (u._rateBN.toNumberSafe ? u._rateBN.toNumberSafe() : 0) * dt * 100;
+        const progRate = (u._rateBN && u._rateBN.toNumberSafe) ? u._rateBN.toNumberSafe() : 0;
+        const incProg = progRate * dt * 100;
         currProgress[i] += incProg;
         if (currProgress[i] > PROGRESS_CAP) currProgress[i] = PROGRESS_CAP;
         if (currProgress[i] >= 100){
@@ -578,16 +553,13 @@
           if (completed > 1000000) completed = 1000000;
           currProgress[i] -= completed * 100;
           const incBaseBN = getMultiplierIncrementBig(u);
-          // scale incBaseBN by completed: * completed
           incBaseBN.mulByNumber(completed);
           u._multBN.addInPlace(incBaseBN);
-          // clamp by exponent if needed
           if (u._multBN.e > 300) u._multBN = BigNum.fromNumber(1e300);
         }
         u.progress = currProgress[i];
       }
 
-      // compute total multiplier product as BigNum
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -599,13 +571,10 @@
         totalMultBN.mulInPlace(factorBN);
       }
 
-      // add = baseIncome * totalMultBN * dt (BigNum)
       const addBN = baseIncome.clone();
       addBN.mulInPlace(totalMultBN);
       addBN.mulByNumber(dt);
-      // add to money
       money.addInPlace(addBN);
-      // safety fallback
       if (money.e > 1000) money = BigNum.fromNumber(1e300);
     }
 
@@ -623,7 +592,6 @@
       }
       const alpha = accumulator / FIXED_DT;
 
-      // display money: small -> numeric smoothing, large -> BigNum string
       if (money.m === 0){
         displayMoneyNum += (0 - displayMoneyNum) * 0.12;
         document.getElementById('money').textContent = fmtSmall(displayMoneyNum);
@@ -639,7 +607,6 @@
         document.getElementById('money').textContent = money.toString();
       }
 
-      // fills via interpolation
       for (let i=0;i<upgrades.length;i++){
         const interp = prevProgress[i] + (currProgress[i] - prevProgress[i]) * alpha;
         const w = Math.min(Math.max(interp, 0), 100);
@@ -660,7 +627,7 @@
     document.getElementById('globalPrestigeBtn').addEventListener('click', ()=> doGlobalPrestige(false));
     window.addEventListener('beforeunload', ()=> saveGame());
 
-    // debug URL
+    // debug url params
     const params = new URLSearchParams(location.search);
     if (params.get('money')){
       const m = Number(params.get('money'));
