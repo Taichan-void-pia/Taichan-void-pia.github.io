@@ -234,6 +234,7 @@
       return String(n);
     }
 
+    // sanitize loaded upgrades -> convert rate/mult/baseCost etc to BigNum as needed
     function sanitizeUpgrades(list){
       for (let i=0;i<list.length;i++){
         const u = list[i];
@@ -290,29 +291,6 @@
             <button id="asc_${i}" class="btn btn-small">昇天</button>
           </div>
         `;
-        container.appendChild(div);
-        upgradeUI[i] = {
-          fillEl: document.getElementById('fill'+i),
-          lvlEl: document.getElementById('lvl'+i),
-          costEl: document.getElementById('cost'+i),
-          multEl: document.getElementById('mult'+i),
-          rateEl: document.getElementById('rate'+i),
-          ascEl: document.getElementById('asc'+i),
-          pLvEl: document.getElementById('pLv'+i),
-          pLvREl: document.getElementById('pLvR'+i),
-          pLvCEl: document.getElementById('pLvC'+i),
-          btn1: document.getElementById('buy1_'+i),
-          btn10: document.getElementById('buy10_'+i),
-          btn100: document.getElementById('buy100_'+i),
-          btnMax: document.getElementById('buyMax_'+i),
-          btnAsc: document.getElementById('asc_'+i),
-        };
-        upgradeUI[i].btn1.addEventListener('click', ()=> buyUpgrade(i,1));
-        upgradeUI[i].btn10.addEventListener('click', ()=> buyUpgrade(i,10));
-        upgradeUI[i].btn100.addEventListener('click', ()=> buyUpgrade(i,100));
-        upgradeUI[i].btnMax.addEventListener('click', ()=> buyUpgrade(i,'max'));
-        upgradeUI[i].btnAsc.addEventListener('click', ()=> tryAscend(i));
-      });
         container.appendChild(div);
         upgradeUI[i] = {
           fillEl: document.getElementById('fill'+i),
@@ -523,4 +501,179 @@
             name:u.name,
             baseRate:u.baseRate,
             // numeric fields stored as numbers for compatibility but also store BN objects
-            rateBN: u._
+            rateBN: u._rateBN.toObject(),
+            multBN: u._multBN.toObject(),
+            baseCostBN: u._baseCostBN.toObject(),
+            baseCost: u.baseCost,
+            level: u.level,
+            progress: u.progress,
+            prestigeLevel: u.prestigeLevel,
+            ascendCount: u.ascendCount
+          })),
+          prestigePoints: prestigePoints.toObject(),
+          prestigeCount,
+          prestigeMult: prestigeMult.toObject(),
+          lastGlobalPrestigeScore: lastGlobalPrestigeScore.toObject()
+        };
+        localStorage.setItem('idle_all_big_save', JSON.stringify(save));
+      } catch(e){ console.warn('save fail', e); }
+    }
+    function loadGame(){
+      try {
+        const raw = localStorage.getItem('idle_all_big_save');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object'){
+          if (data.money) money = BigNum.fromObject(data.money);
+          if (data.baseIncome) baseIncome = BigNum.fromObject(data.baseIncome);
+          if (Array.isArray(data.upgrades) && data.upgrades.length === upgradesTemplate.length){
+            upgrades = data.upgrades.map((s, i) => {
+              // merge with template for missing fields
+              const t = JSON.parse(JSON.stringify(upgradesTemplate[i]));
+              const merged = Object.assign(t, s);
+              // convert BN fields
+              merged._rateBN = s.rateBN ? BigNum.fromObject(s.rateBN) : BigNum.fromNumber(merged.rate);
+              merged._multBN = s.multBN ? BigNum.fromObject(s.multBN) : BigNum.fromNumber(merged.mult);
+              merged._baseCostBN = s.baseCostBN ? BigNum.fromObject(s.baseCostBN) : BigNum.fromNumber(merged.baseCost);
+              return merged;
+            });
+          }
+          if (data.prestigePoints) prestigePoints = BigNum.fromObject(data.prestigePoints);
+          if (typeof data.prestigeCount === 'number') prestigeCount = data.prestigeCount;
+          if (data.prestigeMult) prestigeMult = BigNum.fromObject(data.prestigeMult);
+          if (data.lastGlobalPrestigeScore) lastGlobalPrestigeScore = BigNum.fromObject(data.lastGlobalPrestigeScore);
+        }
+        // ensure all upgrades have BN fields
+        for (let i=0;i<upgrades.length;i++){
+          const u = upgrades[i];
+          if (!u._rateBN) u._rateBN = BigNum.fromNumber(u.rate || u.baseRate || 1);
+          if (!u._multBN) u._multBN = BigNum.fromNumber(u.mult || 0);
+          if (!u._baseCostBN) u._baseCostBN = BigNum.fromNumber(u.baseCost || upgradesTemplate[i].baseCost);
+        }
+      } catch(e){ console.warn('load fail', e); }
+    }
+
+    // fixed step simulation + interpolation
+    sanitizeUpgrades(upgrades);
+    initUI();
+    loadGame();
+    updateUI_throttled(true);
+
+    for (let i=0;i<upgrades.length;i++){ prevProgress[i]=upgrades[i].progress; currProgress[i]=upgrades[i].progress; }
+
+    const FIXED_DT = 0.05;
+    let accumulator = 0;
+    let lastTime = performance.now();
+
+    function simulateStep(dt){
+      // progress (numbers) and mult (BigNum)
+      for (let i=0;i<upgrades.length;i++){
+        const u = upgrades[i];
+        prevProgress[i] = currProgress[i];
+        const incProg = (u._rateBN.toNumberSafe ? u._rateBN.toNumberSafe() : 0) * dt * 100;
+        currProgress[i] += incProg;
+        if (currProgress[i] > PROGRESS_CAP) currProgress[i] = PROGRESS_CAP;
+        if (currProgress[i] >= 100){
+          let completed = Math.floor(currProgress[i] / 100);
+          if (completed > 1000000) completed = 1000000;
+          currProgress[i] -= completed * 100;
+          const incBaseBN = getMultiplierIncrementBig(u);
+          // scale incBaseBN by completed: * completed
+          incBaseBN.mulByNumber(completed);
+          u._multBN.addInPlace(incBaseBN);
+          // clamp by exponent if needed
+          if (u._multBN.e > 300) u._multBN = BigNum.fromNumber(1e300);
+        }
+        u.progress = currProgress[i];
+      }
+
+      // compute total multiplier product as BigNum
+      let totalMultBN = BigNum.fromNumber(1);
+      for (let i=0;i<upgrades.length;i++){
+        const u = upgrades[i];
+        const pMult = 0.02 * ((u.prestigeLevel && u.prestigeLevel.mult) || 0);
+        const asc = 0.05 * (u.ascendCount || 0);
+        const factorBN = BigNum.fromNumber(1);
+        factorBN.addInPlace(u._multBN);
+        factorBN.addNumber(pMult + asc);
+        totalMultBN.mulInPlace(factorBN);
+      }
+
+      // add = baseIncome * totalMultBN * dt (BigNum)
+      const addBN = baseIncome.clone();
+      addBN.mulInPlace(totalMultBN);
+      addBN.mulByNumber(dt);
+      // add to money
+      money.addInPlace(addBN);
+      // safety fallback
+      if (money.e > 1000) money = BigNum.fromNumber(1e300);
+    }
+
+    function render(){
+      const now = performance.now();
+      let frameDelta = (now - lastTime) / 1000;
+      if (!isFinite(frameDelta) || frameDelta <= 0) frameDelta = 0;
+      lastTime = now;
+      if (frameDelta > 0.5) frameDelta = 0.5;
+      accumulator += frameDelta;
+      if (accumulator > 0.5) accumulator = 0.5;
+      while (accumulator >= FIXED_DT){
+        simulateStep(FIXED_DT);
+        accumulator -= FIXED_DT;
+      }
+      const alpha = accumulator / FIXED_DT;
+
+      // display money: small -> numeric smoothing, large -> BigNum string
+      if (money.m === 0){
+        displayMoneyNum += (0 - displayMoneyNum) * 0.12;
+        document.getElementById('money').textContent = fmtSmall(displayMoneyNum);
+      } else if (money.e <= 12){
+        const v = money.toNumberSafe();
+        if (isFinite(v)){
+          displayMoneyNum += (v - displayMoneyNum) * 0.12;
+          document.getElementById('money').textContent = fmtSmall(displayMoneyNum);
+        } else {
+          document.getElementById('money').textContent = money.toString();
+        }
+      } else {
+        document.getElementById('money').textContent = money.toString();
+      }
+
+      // fills via interpolation
+      for (let i=0;i<upgrades.length;i++){
+        const interp = prevProgress[i] + (currProgress[i] - prevProgress[i]) * alpha;
+        const w = Math.min(Math.max(interp, 0), 100);
+        const el = upgradeUI[i] && upgradeUI[i].fillEl;
+        if (el){
+          const scale = Math.max(0, Math.min(1, w / 100));
+          el.style.transform = 'scaleX(' + scale + ')';
+        }
+      }
+
+      updateUI_throttled();
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+
+    // wiring
+    document.getElementById('globalPrestigeBtn').addEventListener('click', ()=> doGlobalPrestige(false));
+    window.addEventListener('beforeunload', ()=> saveGame());
+
+    // debug URL
+    const params = new URLSearchParams(location.search);
+    if (params.get('money')){
+      const m = Number(params.get('money'));
+      if (isFinite(m)) money = BigNum.fromNumber(m);
+      displayMoneyNum = money.toNumberSafe ? (isFinite(money.toNumberSafe()) ? money.toNumberSafe() : 0) : 0;
+      updateUI_throttled(true);
+    }
+    if (params.get('forceGlobal') === '1') setTimeout(()=> doGlobalPrestige(true), 200);
+
+  } catch(err){
+    showError(err && err.message ? err.message : String(err));
+  }
+})();
+</script>
+</body>
+</html>
