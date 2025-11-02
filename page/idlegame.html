@@ -2,10 +2,10 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Fix: 放置ゲーム (動作確認版)</title>
+<title>Smooth Idle — カクつき抑制版</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-  body{font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
+  body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
   h1{color:#7bf3a8;margin:0 0 8px 0}
   .errorBanner{background:#5b1010;color:#fff;padding:8px;border-radius:6px;margin-bottom:10px;display:none}
   .stats{background:rgba(255,255,255,0.03);padding:10px;border-radius:8px;margin-bottom:10px}
@@ -24,7 +24,7 @@
 <body>
   <div id="error" class="errorBanner"></div>
 
-  <h1>💰 放置ゲーム（動作確認版）</h1>
+  <h1>💰 放置ゲーム — 滑らか表示版</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
@@ -36,10 +36,7 @@
     <button id="globalPrestigeBtn" class="btn btn-primary">✨ グローバル転生</button>
     <label class="small" style="margin-left:8px">Auto-buy:
       <select id="autoQty">
-        <option value="1">×1</option>
-        <option value="10">×10</option>
-        <option value="100">×100</option>
-        <option value="max">×Max</option>
+        <option value="1">×1</option><option value="10">×10</option><option value="100">×100</option><option value="max">×Max</option>
       </select>
       <input id="autoToggle" type="checkbox" style="margin-left:6px" />（転生1回後に有効）
     </label>
@@ -48,11 +45,9 @@
 
   <div id="upgradeContainer"></div>
 
-  <div id="prestigeUpgradeContainer" class="panel small"></div>
-
 <script>
 (function(){
-  // エラー表示ヘルパー
+  // --- 安全なエラー表示 ---
   function showError(msg){
     const el = document.getElementById('error');
     el.style.display = 'block';
@@ -61,7 +56,7 @@
   }
 
   try {
-    // ---------- 定義 ----------
+    // ---------- データ定義 ----------
     const upgradesTemplate = [
       { name:"収入アップ", baseRate:0.9, rate:0.9, mult:0, speedMult:1.18, baseCost:12, level:0, progress:0, prestigeLevel:{mult:0,rate:0,cost:0}, ascendCount:0 },
       { name:"効率アップ", baseRate:0.6, rate:0.6, mult:0, speedMult:1.16, baseCost:40, level:0, progress:0, prestigeLevel:{mult:0,rate:0,cost:0}, ascendCount:0 },
@@ -74,10 +69,9 @@
       { name:"量子サーバー", baseRate:0.05, rate:0.05, mult:0, speedMult:1.055, baseCost:1200000, level:0, progress:0, prestigeLevel:{mult:0,rate:0,cost:0}, ascendCount:0 },
       { name:"次元コア", baseRate:0.02, rate:0.02, mult:0, speedMult:1.04, baseCost:6000000, level:0, progress:0, prestigeLevel:{mult:0,rate:0,cost:0}, ascendCount:0 },
     ];
-
     function cloneTemplate(){ return JSON.parse(JSON.stringify(upgradesTemplate)); }
 
-    // ---------- state ----------
+    // --- ゲーム状態（物理: 確定値） ---
     let money = 0;
     let baseIncome = 1;
     let upgrades = cloneTemplate();
@@ -87,10 +81,15 @@
     let lastGlobalPrestigeScore = 0;
     const COST_POW = 1.5;
 
-    // ---------- DOM cache ----------
+    // --- レンダリング状態（表示用・補間に使う） ---
+    let displayMoney = 0;           // 表示上の所持金（滑らかに補間）
+    const prevProgress = new Array(upgrades.length).fill(0);
+    const currProgress = new Array(upgrades.length).fill(0);
+
+    // --- DOM キャッシュ ---
     const upgradeUI = [];
 
-    // ---------- helpers ----------
+    // ---------- ヘルパー ----------
     function fmt(n){
       if (typeof n !== 'number') return String(n);
       if (!isFinite(n)) return "Infinity";
@@ -103,11 +102,10 @@
     function getUpgradeCost(u){
       const raw = Math.floor(u.baseCost * Math.pow(u.level + 1, COST_POW));
       const reduction = 1 - 0.03 * ((u.prestigeLevel && u.prestigeLevel.cost) || 0);
-      const v = Math.max(1, Math.floor(raw * Math.max(reduction, 0.5)));
-      return v;
+      return Math.max(1, Math.floor(raw * Math.max(reduction, 0.5)));
     }
 
-    // ---------- UI init ----------
+    // ---------- UI 初期化 ----------
     function initUI(){
       const container = document.getElementById('upgradeContainer');
       container.innerHTML = '';
@@ -146,27 +144,21 @@
           btnMax: document.getElementById('buyMax_'+i),
           btnAsc: document.getElementById('asc_'+i),
         };
-        // events
         upgradeUI[i].btn1.addEventListener('click', ()=> buyUpgrade(i,1));
         upgradeUI[i].btn10.addEventListener('click', ()=> buyUpgrade(i,10));
         upgradeUI[i].btn100.addEventListener('click', ()=> buyUpgrade(i,100));
         upgradeUI[i].btnMax.addEventListener('click', ()=> buyUpgrade(i,'max'));
         upgradeUI[i].btnAsc.addEventListener('click', ()=> tryAscend(i));
       });
-
-      // prestige UI minimal
-      const pcont = document.getElementById('prestigeUpgradeContainer');
-      pcont.innerHTML = '<div class="small">永続(Prestige)は各カードの「永続Lv」で購入します（後で拡張）。</div>';
     }
 
-    // ---------- UI update (throttled) ----------
+    // ---------- 差分UI更新（軽量、100msスロットル） ----------
     let lastUI = 0;
-    function updateUI(force){
+    function updateUI_throttled(force){
       const now = performance.now();
       if (!force && now - lastUI < 100) return;
       lastUI = now;
-      // money and rate
-      document.getElementById('money').textContent = fmt(money);
+      // money and rate (rate updated less frequently)
       const totalMult = upgrades.reduce((acc,u)=>{
         const pMult = ((u.prestigeLevel && u.prestigeLevel.mult) || 0) * 0.02;
         const asc = (u.ascendCount || 0) * 0.05;
@@ -175,7 +167,7 @@
       document.getElementById('rate').textContent = (baseIncome * totalMult).toFixed(2);
       document.getElementById('formula').textContent = '収入 = ' + baseIncome + ' × ' +
         upgrades.map(u=>'(1+' + (u.mult + ((u.prestigeLevel && u.prestigeLevel.mult)||0)*0.02 + ((u.ascendCount||0)*0.05)).toFixed(3)+')').join(' × ');
-      // per-upgrade updates
+
       upgrades.forEach((u,i)=>{
         const ui = upgradeUI[i];
         if (!ui) return;
@@ -183,24 +175,23 @@
         ui.costEl.textContent = fmt(getUpgradeCost(u));
         ui.multEl.textContent = '+' + u.mult.toFixed(3);
         ui.rateEl.textContent = u.rate.toFixed(2);
-        ui.fillEl.style.width = Math.min(u.progress,100) + '%';
         ui.ascEl.textContent = u.ascendCount || 0;
         ui.pLvEl.textContent = (u.prestigeLevel && u.prestigeLevel.mult) || 0;
         ui.pLvREl.textContent = (u.prestigeLevel && u.prestigeLevel.rate) || 0;
         ui.pLvCEl.textContent = (u.prestigeLevel && u.prestigeLevel.cost) || 0;
         ui.btnAsc.disabled = !(u.level >= (100 * ((u.ascendCount || 0) + 1)));
       });
-      // global prestige enable
+
+      // global prestige enable/auto toggle lock
       const gbtn = document.getElementById('globalPrestigeBtn');
       const can = (money >= 1e20 && (prestigeCount === 0 || money >= lastGlobalPrestigeScore));
       gbtn.disabled = !can;
-      // auto toggle lock when no global prestige yet
       const autoToggle = document.getElementById('autoToggle');
       if (prestigeCount < 1) { autoToggle.checked = false; autoToggle.disabled = true; }
       else autoToggle.disabled = false;
     }
 
-    // ---------- buying ----------
+    // ---------- 購入ロジック（簡潔） ----------
     function costToBuy(u,n){
       if (n <= 0) return 0;
       const base = u.baseCost;
@@ -217,7 +208,6 @@
     function buyUpgrade(idx, qty){
       const u = upgrades[idx];
       if (qty === 'max'){
-        // binary search
         let lo = 0, hi = 1;
         while (costToBuy(u,hi) <= money && hi < 1e9) hi *= 2;
         while (lo + 1 < hi){
@@ -240,14 +230,13 @@
       u.level += n;
       u.rate *= Math.pow(Math.max(1, u.speedMult), n * 0.4);
       saveGame();
-      updateUI(true);
+      updateUI_throttled(true);
     }
 
-    // ---------- progress handling ----------
+    // ---------- メーター & 乗数ロジック ----------
     function getMultiplierIncrement(u){
       return 0.004 * Math.pow(1 + u.level, 0.45);
     }
-
     function tryAscend(i){
       const u = upgrades[i];
       const need = 100 * ((u.ascendCount || 0) + 1);
@@ -257,11 +246,11 @@
       u.level = 0;
       u.progress = 0;
       saveGame();
-      updateUI(true);
+      updateUI_throttled(true);
       alert(u.name + ' を昇天しました（昇天回数: ' + u.ascendCount + '）');
     }
 
-    // ---------- prestige global ----------
+    // ---------- グローバル転生 ----------
     function doGlobalPrestige(force){
       if (!force){
         if (!(money >= 1e20)) { alert('グローバル転生条件: スコア >= 1e20'); return; }
@@ -279,21 +268,19 @@
       prestigeMult *= extra;
       lastGlobalPrestigeScore = score;
       money = 0;
-      // reset level/progress but keep prestigeLevel and ascendCount
       upgrades.forEach(u => { u.level = 0; u.progress = 0; });
       initUI();
       saveGame();
-      updateUI(true);
+      updateUI_throttled(true);
       alert('グローバル転生完了: prestigePoints +1, 収入倍率 ×' + extra.toFixed(2));
     }
 
-    // ---------- auto-buy ----------
+    // ---------- Auto-buy ----------
     setInterval(function(){
       try {
         const autoOn = document.getElementById('autoToggle').checked && prestigeCount >= 1;
         if (!autoOn) return;
         const qty = document.getElementById('autoQty').value;
-        // cheapest upgrade strategy
         const order = upgrades.map((u,i)=>({i,c:getUpgradeCost(u)})).sort((a,b)=>a.c - b.c);
         for (let k=0;k<order.length;k++){
           const entry = order[k];
@@ -302,21 +289,19 @@
             break;
           }
         }
-      } catch(e){
-        console.warn('auto-buy error', e);
-      }
+      } catch(e){ console.warn('auto-buy error', e); }
     }, 900);
 
     // ---------- save/load ----------
     function saveGame(){
       try {
         const save = { money, baseIncome, upgrades, prestigePoints, prestigeCount, prestigeMult, lastGlobalPrestigeScore };
-        localStorage.setItem('idle_fix_save', JSON.stringify(save));
+        localStorage.setItem('idle_smooth_save', JSON.stringify(save));
       } catch(e){ console.warn('save fail', e); }
     }
     function loadGame(){
       try {
-        const raw = localStorage.getItem('idle_fix_save');
+        const raw = localStorage.getItem('idle_smooth_save');
         if (!raw) return;
         const data = JSON.parse(raw);
         if (typeof data.money === 'number') money = data.money;
@@ -329,58 +314,109 @@
       } catch(e){ console.warn('load fail', e); }
     }
 
-    // ---------- main loop ----------
+    // ---------- 固定ステップシミュレーション + 補間レンダラ ----------
     initUI();
     loadGame();
-    updateUI(true);
+    updateUI_throttled(true);
 
-    let last = Date.now();
-    function loop(){
-      const now = Date.now();
-      let delta = (now - last) / 1000;
-      last = now;
-      if (!isFinite(delta) || delta <= 0) delta = 0;
-      const MAX_DELTA = 1.0;
-      if (delta > MAX_DELTA) delta = MAX_DELTA;
+    const FIXED_DT = 0.05; // 50ms 固定ステップ（20Hz）で安定した進行
+    let accumulator = 0;
+    let lastTime = performance.now();
 
-      upgrades.forEach(u=>{
-        u.progress += u.rate * delta * 100;
-        if (u.progress >= 100){
-          let completed = Math.floor(u.progress / 100);
+    // keep prev/curr progress for interpolation
+    for (let i=0;i<upgrades.length;i++){ prevProgress[i] = upgrades[i].progress; currProgress[i] = upgrades[i].progress; }
+
+    function simulateStep(dt){
+      // dt is fixed (FIXED_DT)
+      // advance progress and money deterministically
+      // use local arrays to minimize object churn
+      for (let i=0;i<upgrades.length;i++){
+        const u = upgrades[i];
+        // update prevProgress for interpolation
+        prevProgress[i] = currProgress[i];
+        // progress in percent: u.rate * dt * 100
+        let incProg = u.rate * dt * 100;
+        currProgress[i] += incProg;
+        // handle completion batch
+        if (currProgress[i] >= 100){
+          let completed = Math.floor(currProgress[i] / 100);
           if (completed > 1000000) completed = 1000000;
-          u.progress -= completed * 100;
+          currProgress[i] -= completed * 100;
+          // increment mult
           const incBase = getMultiplierIncrement(u);
           const pMult = 1 + 0.02 * ((u.prestigeLevel && u.prestigeLevel.mult) || 0);
           const ascBonus = 1 + ((u.ascendCount||0) * 0.05);
           u.mult += incBase * pMult * ascBonus * completed;
         }
-      });
+        // also sync u.progress to currProgress for save/display updates
+        u.progress = currProgress[i];
+      }
 
+      // compute income for this step
       const totalMult = upgrades.reduce((acc,u)=>{
         const pBonus = ((u.prestigeLevel && u.prestigeLevel.mult) || 0) * 0.02;
         const ascBonus = (u.ascendCount || 0) * 0.05;
         return acc * (1 + u.mult + pBonus + ascBonus);
       },1) * prestigeMult;
 
-      money += baseIncome * totalMult * delta;
-
-      updateUI();
-
-      if (Date.now() % 5000 < 40) saveGame();
-      requestAnimationFrame(loop);
+      money += baseIncome * totalMult * dt;
     }
-    requestAnimationFrame(loop);
+
+    function render(){
+      const now = performance.now();
+      let frameDelta = (now - lastTime) / 1000;
+      if (!isFinite(frameDelta) || frameDelta <= 0) frameDelta = 0;
+      lastTime = now;
+      // cap to avoid spiral of death
+      if (frameDelta > 0.5) frameDelta = 0.5;
+
+      accumulator += frameDelta;
+      // prevent excess accumulator; allow up to 0.5s of catch-up
+      if (accumulator > 0.5) accumulator = 0.5;
+
+      // run fixed steps
+      while (accumulator >= FIXED_DT){
+        simulateStep(FIXED_DT);
+        accumulator -= FIXED_DT;
+      }
+
+      // interpolation factor for rendering between prev and curr
+      const alpha = accumulator / FIXED_DT;
+
+      // interpolate money display smoothly (lerp with easing)
+      // use exponential smoothing to avoid jumps: displayMoney += (money - displayMoney) * 0.12
+      displayMoney += (money - displayMoney) * 0.12;
+
+      // update money DOM each frame for smooth numeric feel
+      document.getElementById('money').textContent = fmt(displayMoney);
+
+      // update per-upgrade fills by interpolating prev/curr progress:
+      for (let i=0;i<upgrades.length;i++){
+        const interp = prevProgress[i] + (currProgress[i] - prevProgress[i]) * alpha;
+        const w = Math.min(Math.max(interp, 0), 100);
+        const el = upgradeUI[i] && upgradeUI[i].fillEl;
+        if (el) el.style.width = w + '%';
+      }
+
+      // throttled UI updates (stats etc.)
+      updateUI_throttled();
+
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
 
     // ---------- wiring ----------
     document.getElementById('globalPrestigeBtn').addEventListener('click', ()=> doGlobalPrestige(false));
     window.addEventListener('beforeunload', ()=> saveGame());
 
-    // URL debug
+    // URL debug support
     const params = new URLSearchParams(location.search);
     if (params.get('money')) {
       const m = Number(params.get('money'));
       money = isFinite(m) ? m : Number(params.get('money'));
-      updateUI(true);
+      displayMoney = money;
+      updateUI_throttled(true);
     }
     if (params.get('forceGlobal') === '1') setTimeout(()=> doGlobalPrestige(true), 200);
 
