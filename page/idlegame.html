@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — 修正版（倍速最大3・コスト上昇・BigNum）</title>
+<title>Idle — 修正版（Prestige/Ascend/Infinity）</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -20,8 +20,7 @@
   .panel{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .small{font-size:0.85em;color:#cfe8da}
   .speedControls{display:flex;gap:8px;align-items:center}
-  input[type="number"]{width:80px;padding:4px;border-radius:4px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
-  select{padding:4px;border-radius:4px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,0.06)}
+  .invisible{display:none}
 </style>
 </head>
 <body>
@@ -33,16 +32,21 @@
     所持金：<span id="money">0</span>　
     秒あたり：<span id="rate">0</span>
     <div class="small" id="formula">(計算式)</div>
+    <div style="margin-top:8px">
+      無限メーター：<div class="meter" style="display:inline-block;width:40%;margin-left:8px;vertical-align:middle"><div id="inftyFill" class="fill" style="transform:scaleX(0)"></div></div>
+      <button id="gainInfinityBtn" class="btn btn-primary invisible" style="margin-left:10px">無限を得る</button>
+      <span class="small" style="margin-left:8px">無限ポイント: <span id="inftyPoints">0</span></span>
+    </div>
   </div>
 
   <div class="panel">
     <div style="display:flex;gap:8px;align-items:center">
-      <button id="globalPrestigeBtn" class="btn btn-primary">✨ グローバル転生</button>
+      <button id="prestigeBtn" class="btn btn-primary invisible">✨ プレステージ</button>
       <label class="small" style="margin-left:8px">Auto-buy:
         <select id="autoQty">
           <option value="1">×1</option><option value="10">×10</option><option value="100">×100</option><option value="max">×Max</option>
         </select>
-        <input id="autoToggle" type="checkbox" style="margin-left:6px" />（転生1回後に有効）
+        <input id="autoToggle" type="checkbox" style="margin-left:6px" />（プレステージ1回後に有効）
       </label>
     </div>
 
@@ -58,13 +62,14 @@
       <button id="pauseBtn" class="btn btn-small">一時停止</button>
     </div>
 
-    <div class="small" style="width:100%;margin-top:6px">グローバル転生初回条件: 1e20（2回目以降は前回転生スコア以上） — ホットキー: [ を半分, ] を2倍, Spaceで一時停止</div>
+    <div class="small" style="width:100%;margin-top:6px">プレステージ初回条件: 1e20（2回目以降は前回プレステージ時のスコア以上） — 昇天はLv100で表示・実行可能</div>
   </div>
 
   <div id="upgradeContainer"></div>
 
 <script>
 (function(){
+  // --- エラー表示 ---
   function showError(msg){
     const el = document.getElementById('error');
     el.style.display = 'block';
@@ -73,54 +78,48 @@
   }
 
   try {
-    // -------- BigNum (軽量科学表記) ----------
+    // ---------------- BigNum (軽量) ----------------
     class BigNum {
       constructor(m=0,e=0){ this.m=m; this.e=e; this._normalize(); }
       static zero(){ return new BigNum(0,0); }
-      static fromNumber(n){
-        if (!isFinite(n) || n === 0) return BigNum.zero();
-        const sign = n < 0 ? -1 : 1;
-        n = Math.abs(n);
-        const exp = Math.floor(Math.log10(n));
-        const mant = n / Math.pow(10, exp);
-        return new BigNum(sign * mant, exp);
-      }
-      static fromObject(obj){
-        if (!obj || typeof obj.m !== 'number' || typeof obj.e !== 'number') return BigNum.zero();
-        return new BigNum(obj.m, obj.e);
-      }
+      static fromNumber(n){ if (!isFinite(n) || n === 0) return BigNum.zero(); const sign = n<0?-1:1; n=Math.abs(n); const exp=Math.floor(Math.log10(n)); const mant=n/Math.pow(10,exp); return new BigNum(sign*mant, exp); }
+      static fromObject(o){ if (!o || typeof o.m!=='number' || typeof o.e!=='number') return BigNum.zero(); return new BigNum(o.m, o.e); }
+      static fromMantExp(m,e){ return new BigNum(m,e); } // helper
       clone(){ return new BigNum(this.m, this.e); }
       _normalize(){
         if (!isFinite(this.m) || !isFinite(this.e) || this.m === 0){
-          if (this.m === 0){ this.e=0; this.m=0; return; }
-          if (!isFinite(this.m)) this.m = this.m>0?9.9999999999999:-9.9999999999999;
+          if (this.m === 0){ this.e = 0; this.m = 0; return; }
+          if (!isFinite(this.m)) this.m = this.m > 0 ? 9.9999999999999 : -9.9999999999999;
         }
-        if (this.m === 0){ this.e=0; return; }
+        if (this.m === 0){ this.e = 0; return; }
         let sign = this.m < 0 ? -1 : 1;
         let mabs = Math.abs(this.m);
-        if (mabs === 0){ this.m=0; this.e=0; return; }
+        if (mabs === 0){ this.m = 0; this.e = 0; return; }
         const shift = Math.floor(Math.log10(mabs));
-        if (isFinite(shift) && shift !== 0){ mabs = mabs / Math.pow(10, shift); this.e += shift; }
-        if (mabs >= 10){ mabs /= 10; this.e += 1; }
+        if (isFinite(shift) && shift !== 0){
+          mabs = mabs / Math.pow(10, shift);
+          this.e = this.e + shift;
+        }
+        if (mabs >= 10){ mabs = mabs / 10; this.e = this.e + 1; }
         this.m = sign * mabs;
       }
       toObject(){ return {m:this.m, e:this.e}; }
       toNumberSafe(){ if (!isFinite(this.m) || !isFinite(this.e)) return NaN; if (this.e > 15 || this.e < -15) return this.m>0?Infinity:-Infinity; return this.m * Math.pow(10, this.e); }
-      toString(){ if (this.m===0) return "0"; if (this.e<=12 && this.e>=-6){ const v=this.toNumberSafe(); if (isFinite(v)) return v.toLocaleString(undefined,{maximumFractionDigits:2}); } return this.m.toFixed(3)+"e"+this.e; }
-      addInPlace(other){ if (typeof other==='number') other=BigNum.fromNumber(other); if (!(other instanceof BigNum)) return; if (this.m===0){ this.m=other.m; this.e=other.e; return; } if (other.m===0) return; const diff=this.e-other.e; if (Math.abs(diff)>15){ if (diff>0) return; else { this.m=other.m; this.e=other.e; return; } } if (diff>=0){ const scaled=other.m * Math.pow(10, -diff); this.m += scaled; } else { const scaled=this.m * Math.pow(10, diff); this.m = other.m + scaled; this.e = other.e; } this._normalize(); }
-      subInPlace(other){ if (typeof other==='number') other=BigNum.fromNumber(other); if (!(other instanceof BigNum)) return; other = new BigNum(-other.m, other.e); this.addInPlace(other); }
-      mulInPlace(other){ if (typeof other==='number'){ if (!isFinite(other) || other===0){ this.m=0; this.e=0; return; } other = BigNum.fromNumber(other); } if (!(other instanceof BigNum)) return; if (this.m===0 || other.m===0){ this.m=0; this.e=0; return; } this.m *= other.m; this.e += other.e; this._normalize(); }
-      mulByNumber(n){ if (typeof n!=='number') return; if (!isFinite(n) || n===0){ this.m=0; this.e=0; return; } this.m *= n; this._normalize(); }
+      toString(){ if (this.m === 0) return "0"; if (this.e <=12 && this.e >= -6){ const v=this.toNumberSafe(); if (isFinite(v)) return v.toLocaleString(undefined,{maximumFractionDigits:2}); } return this.m.toFixed(3) + "e" + this.e; }
+      addInPlace(other){ if (typeof other === 'number') other = BigNum.fromNumber(other); if (!(other instanceof BigNum)) return; if (this.m === 0){ this.m = other.m; this.e = other.e; return; } if (other.m === 0) return; const diff = this.e - other.e; if (Math.abs(diff) > 15){ if (diff > 0) return; else { this.m = other.m; this.e = other.e; return; } } if (diff >= 0){ const scaled = other.m * Math.pow(10, -diff); this.m = this.m + scaled; } else { const scaled = this.m * Math.pow(10, diff); this.m = other.m + scaled; this.e = other.e; } this._normalize(); }
+      subInPlace(other){ if (typeof other === 'number') other = BigNum.fromNumber(other); if (!(other instanceof BigNum)) return; other = new BigNum(-other.m, other.e); this.addInPlace(other); }
+      mulInPlace(other){ if (typeof other === 'number'){ if (!isFinite(other) || other === 0){ this.m = 0; this.e = 0; return; } other = BigNum.fromNumber(other); } if (!(other instanceof BigNum)) return; if (this.m === 0 || other.m === 0){ this.m = 0; this.e = 0; return; } this.m = this.m * other.m; this.e = this.e + other.e; this._normalize(); }
+      mulByNumber(n){ if (typeof n !== 'number') return; if (!isFinite(n) || n === 0){ this.m = 0; this.e = 0; return; } this.m = this.m * n; this._normalize(); }
       addNumber(n){ this.addInPlace(BigNum.fromNumber(n)); }
-      gteNumber(n){ if (typeof n!=='number') n=Number(n); if (!isFinite(n)) return false; if (n===0) return this.m>=0; const bn=BigNum.fromNumber(n); return this.gteBig(bn); }
-      gteBig(b){ if (!(b instanceof BigNum)) b = BigNum.fromObject(b); if (this.m===0 && b.m===0) return true; if (this.e !== b.e) return this.e > b.e; return Math.abs(this.m) >= Math.abs(b.m); }
+      gteNumber(n){ if (typeof n !== 'number') n = Number(n); if (!isFinite(n)) return false; if (n === 0) return this.m >= 0; const bn = BigNum.fromNumber(n); return this.gteBig(bn); }
+      gteBig(b){ if (!(b instanceof BigNum)) b = BigNum.fromObject(b); if (this.m === 0 && b.m === 0) return true; if (this.e !== b.e) return this.e > b.e; return Math.abs(this.m) >= Math.abs(b.m); }
     }
 
-    // ---------- constants & template ----------
+    // --------------- constants & templates ---------------
+    const INF_TARGET = BigNum.fromMantExp(1.8, 308); // 1.8e308
     const MAX_VALUE = 1e150;
     const PROGRESS_CAP = 1e9;
-    const COST_BASE_MULT = 1.15; // cost increases by 1.15^level
-    const COST_POW = 1.0; // we'll use 1.0 in combination with COST_BASE_MULT
+    const COST_BASE_MULT = 1.15;
     const upgradesTemplate = [
       { name:"収入アップ", baseRate:0.9, rate:0.9, mult:0, speedMult:1.18, baseCost:12, level:0, progress:0, prestigeLevel:{mult:0,rate:0,cost:0}, ascendCount:0 },
       { name:"効率アップ", baseRate:0.6, rate:0.6, mult:0, speedMult:1.16, baseCost:40, level:0, progress:0, prestigeLevel:{mult:0,rate:0,cost:0}, ascendCount:0 },
@@ -135,16 +134,17 @@
     ];
     function cloneTemplate(){ return JSON.parse(JSON.stringify(upgradesTemplate)); }
 
-    // ---------- state ----------
+    // --------------- state ---------------
     let money = BigNum.zero();
     let baseIncome = BigNum.fromNumber(1);
     let upgrades = cloneTemplate();
     let prestigePoints = BigNum.fromNumber(0);
     let prestigeCount = 0;
     let prestigeMult = BigNum.fromNumber(1);
-    let lastGlobalPrestigeScore = BigNum.zero();
+    let lastPrestigeScore = BigNum.zero(); // BigNum
+    let infinityPoints = 0;
 
-    let speedMultiplier = 1.0; // capped to 3
+    let speedMultiplier = 1.0; // 1..3
     let paused = false;
 
     let displayMoneyNum = 0;
@@ -184,14 +184,13 @@
     // cost = baseCost * COST_BASE_MULT ^ level
     function getUpgradeCostBig(u, extraLevelOffset=0){
       const level = (u.level + extraLevelOffset);
-      // compute multiplier = COST_BASE_MULT ^ level
       const factor = Math.pow(COST_BASE_MULT, Math.max(0, level));
       const c = u._baseCostBN.clone();
       c.mulByNumber(factor);
       return c;
     }
 
-    // UI
+    // UI init
     function initUI(){
       const container = document.getElementById('upgradeContainer');
       container.innerHTML = '';
@@ -205,13 +204,13 @@
           <div class="small">永続 Lv(m/r/c): <span id="pLv${i}">0</span>/<span id="pLvR${i}">0</span>/<span id="pLvC${i}">0</span></div>
           <div class="small">乗数合計: <span id="mult${i}">+0.000</span></div>
           <div class="small">メーター速度: <span id="rate${i}">${rateStr}</span>/s</div>
-          <div class="meter"><div id="fill${i}" class="fill" style="width:0%"></div></div>
+          <div class="meter"><div id="fill${i}" class="fill" style="transform:scaleX(0)"></div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
             <button id="buy1_${i}" class="btn btn-primary">購入（<span id="cost${i}">0</span>）</button>
             <button id="buy10_${i}" class="btn btn-small">×10</button>
             <button id="buy100_${i}" class="btn btn-small">×100</button>
             <button id="buyMax_${i}" class="btn btn-small">×Max</button>
-            <button id="asc_${i}" class="btn btn-small">昇天</button>
+            <button id="asc_${i}" class="btn btn-small invisible">昇天</button>
           </div>
         `;
         container.appendChild(div);
@@ -239,7 +238,7 @@
       });
     }
 
-    // UI update (throttled)
+    // throttled UI update
     let lastUI = 0;
     function updateUI_throttled(force){
       const now = performance.now();
@@ -258,18 +257,21 @@
         totalMultBN.mulInPlace(factorBN);
       }
 
+      // rate display
       const rateBN = baseIncome.clone();
       rateBN.mulInPlace(totalMultBN);
       const rateDisplay = rateBN.toNumberSafe();
       document.getElementById('rate').textContent = isFinite(rateDisplay) ? rateDisplay.toFixed(2) : rateBN.toString();
 
+      // formula (approx)
       let formulaParts = upgrades.map(u=>{
         const n = (u._multBN && u._multBN.toNumberSafe && isFinite(u._multBN.toNumberSafe())) ? u._multBN.toNumberSafe() : 0;
         const part = 1 + n + 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0);
         return '(1+' + part.toFixed(3) + ')';
       });
-      document.getElementById('formula').textContent = '収入 = baseIncome × ' + formulaParts.join(' × ') + '  （倍速: ' + speedMultiplier.toFixed(2) + (paused ? ' 停止中' : '') + '）';
+      document.getElementById('formula').textContent = '収入 = baseIncome × ' + formulaParts.join(' × ') + '  （倍速: ' + speedMultiplier.toFixed(0) + (paused ? ' 停止中' : '') + '）';
 
+      // per-upgrade UI updates and asc visibility / buy disabling
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i], ui = upgradeUI[i];
         if (!ui) continue;
@@ -283,33 +285,79 @@
         ui.pLvEl.textContent = (u.prestigeLevel && u.prestigeLevel.mult) || 0;
         ui.pLvREl.textContent = (u.prestigeLevel && u.prestigeLevel.rate) || 0;
         ui.pLvCEl.textContent = (u.prestigeLevel && u.prestigeLevel.cost) || 0;
-        ui.btnAsc.disabled = !(u.level >= 100 * ((u.ascendCount || 0) + 1));
+
+        // Ascend button: only visible when level >= 100
+        if (u.level >= 100) ui.btnAsc.classList.remove('invisible');
+        else ui.btnAsc.classList.add('invisible');
+
+        // Buy disabled when level >= 100
+        const canBuy = u.level < 100;
+        ui.btn1.disabled = !canBuy;
+        ui.btn10.disabled = !canBuy;
+        ui.btn100.disabled = !canBuy;
+        ui.btnMax.disabled = !canBuy;
       }
 
-      const gbtn = document.getElementById('globalPrestigeBtn');
-      gbtn.disabled = !money.gteNumber(1e20);
-      const autoToggle = document.getElementById('autoToggle');
-      if (prestigeCount < 1) { autoToggle.checked=false; autoToggle.disabled=true; } else autoToggle.disabled=false;
+      // Prestige button display logic:
+      const prestigeBtn = document.getElementById('prestigeBtn');
+      let canPrestige = false;
+      // first prestige requires money >= 1e20
+      if (money.gteNumber(1e20)) {
+        if (prestigeCount === 0) canPrestige = true;
+        else {
+          // subsequent require money >= lastPrestigeScore (BigNum)
+          if (money.gteBig(lastPrestigeScore)) canPrestige = true;
+        }
+      }
+      if (canPrestige) prestigeBtn.classList.remove('invisible'); else prestigeBtn.classList.add('invisible');
+
+      // Infinity bar progress & button
+      const inftyFill = document.getElementById('inftyFill');
+      const inftyBtn = document.getElementById('gainInfinityBtn');
+      const pct = computeInfinityProgressPercent(money);
+      inftyFill.style.transform = 'scaleX(' + (pct/100) + ')';
+      if (money.gteBig(INF_TARGET)) inftyBtn.classList.remove('invisible'); else inftyBtn.classList.add('invisible');
+
+      // saved points display
+      document.getElementById('inftyPoints').textContent = String(infinityPoints);
     }
 
-    // costToBuy
+    // compute percent progress towards INF_TARGET using mantissa/exponent math
+    function computeInfinityProgressPercent(bn){
+      if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
+      if (bn.m === 0) return 0;
+      const diff = bn.e - INF_TARGET.e;
+      if (diff > 0) return 100;
+      // ratio = (bn.m / INF_TARGET.m) * 10^(diff)
+      const ratio = (bn.m / INF_TARGET.m) * Math.pow(10, diff);
+      if (!isFinite(ratio) || ratio <= 0) return 0;
+      return Math.min(100, ratio * 100);
+    }
+
+    // costToBuy for n items (BigNum)
     function costToBuyBig(u, n){
       if (n <= 0) return BigNum.zero();
+      // cap to remaining levels
+      const remaining = Math.max(0, 100 - u.level);
+      const want = Math.min(n, remaining);
       let total = BigNum.zero();
-      for (let k=0;k<n;k++){
-        // use getUpgradeCostBig for each incremental purchase
+      for (let k=0;k<want;k++){
         const piece = getUpgradeCostBig(u, k);
         total.addInPlace(piece);
       }
       return total;
     }
 
-    // buy logic
+    // buy logic (respect 100lv cap)
     function buyUpgrade(idx, qty){
       const u = upgrades[idx];
+      if (u.level >= 100){ alert('このアップグレードは最大Lvです（100）'); return; }
       if (qty === 'max'){
-        let lo=0, hi=1;
-        while (money.gteBig(costToBuyBig(u,hi)) && hi < 1e9) hi *= 2;
+        // binary search up to remaining
+        const remaining = 100 - u.level;
+        let lo = 0, hi = 1;
+        while (hi <= remaining && money.gteBig(costToBuyBig(u,hi))) hi *= 2;
+        hi = Math.min(hi, remaining);
         while (lo + 1 < hi){
           const mid = Math.floor((lo + hi)/2);
           if (money.gteBig(costToBuyBig(u, mid))) lo = mid;
@@ -320,16 +368,18 @@
         return;
       }
       const n = Number(qty) || 1;
-      const costBN = costToBuyBig(u, n);
-      if (money.gteBig(costBN)) doPurchase(u, idx, n);
+      const allowed = Math.min(n, 100 - u.level);
+      if (allowed <= 0){ alert('これ以上購入できません（Lv上限）'); return; }
+      const costBN = costToBuyBig(u, allowed);
+      if (money.gteBig(costBN)) doPurchase(u, idx, allowed);
       else alert('お金が足りません');
     }
 
     function doPurchase(u, idx, n){
       const costBN = costToBuyBig(u, n);
       money.subInPlace(costBN);
-      // rate growth: small gentle growth using speedMult
-      const exponent = n * 0.1;
+      // rate growth: adjust slightly larger growth for steeper curve
+      const exponent = n * 0.12;
       const multiplier = Math.pow(Math.max(1, u.speedMult), exponent);
       u._rateBN.mulByNumber(multiplier);
       if (u._rateBN.e > 300) u._rateBN = BigNum.fromNumber(1e300);
@@ -338,19 +388,17 @@
       updateUI_throttled(true);
     }
 
-    // multiplier increment: slightly steeper than before
+    // multiplier increment (a bit steeper)
     function getMultiplierIncrementBig(u){
-      // coefficient slightly larger and exponent slightly larger
-      const base = 0.004 * Math.pow(1 + u.level, 0.36);
+      const base = 0.005 * Math.pow(1 + u.level, 0.38); // slightly steeper
       return BigNum.fromNumber(Math.min(base, 1e12));
     }
 
-    // ascend
+    // ascend: visible only when level >=100; execute whenever level>=100
     function tryAscend(i){
       const u = upgrades[i];
-      const need = 100 * ((u.ascendCount || 0) + 1);
-      if (u.level < need){ alert('必要Lvが足りません: ' + need); return; }
-      if (!confirm(u.name + ' を昇天しますか？')) return;
+      if (u.level < 100){ alert('Lv100で昇天可能です'); return; }
+      if (!confirm(u.name + ' を昇天しますか？ Lvがリセットされ、永続ボーナスが付与されます。')) return;
       u.ascendCount = (u.ascendCount || 0) + 1;
       u.level = 0;
       u.progress = 0;
@@ -361,26 +409,51 @@
       alert(u.name + ' を昇天しました（昇天回数: ' + u.ascendCount + '）');
     }
 
-    // global prestige
-    function doGlobalPrestige(force){
-      if (!force){
-        if (!money.gteNumber(1e20)){ alert('グローバル転生条件: スコア >= 1e20'); return; }
-        if (prestigeCount > 0 && money.toNumberSafe && money.toNumberSafe() < lastGlobalPrestigeScore){ alert('前回転生時スコア以上でないと再転生できません'); return; }
-        if (!confirm('グローバル転生を実行しますか？')) return;
+    // Prestige (formerly global prestige)
+    function doPrestige(force){
+      // only allow when meets criteria (visible only when meets)
+      let can = false;
+      if (money.gteNumber(1e20)){
+        if (prestigeCount === 0) can = true;
+        else if (money.gteBig(lastPrestigeScore)) can = true;
       }
+      if (!force && !can){ alert('プレステージ条件を満たしていません'); return; }
+      if (!force && !confirm('プレステージを実行しますか？（全てリセット、プレステージポイント付与）')) return;
+      // compute extra multiplier
       const scoreNum = money.toNumberSafe ? money.toNumberSafe() : Infinity;
       let extra = 1;
       if (isFinite(scoreNum) && scoreNum >= 1e20) extra = 1 + Math.log10(scoreNum / 1e20);
       prestigePoints.addNumber(1);
       prestigeCount += 1;
       prestigeMult.mulByNumber(extra);
-      lastGlobalPrestigeScore = BigNum.fromNumber(scoreNum);
+      // store lastPrestigeScore as BigNum copy
+      lastPrestigeScore = money.clone();
+      // reset core progress (preserve infinitePoints)
       money = BigNum.zero();
       upgrades.forEach(u => { u.level = 0; u.progress = 0; u._rateBN = BigNum.fromNumber(u.baseRate || 1); u._multBN = BigNum.zero(); });
       initUI();
       saveGame();
       updateUI_throttled(true);
-      alert('グローバル転生完了: prestigePoints +1, 収入倍率 ×' + extra.toFixed(2));
+      alert('プレステージ完了: prestigePoints +1, 収入倍率 ×' + extra.toFixed(2));
+    }
+
+    // Infinity gain: reset everything, give 1 infinite point
+    function gainInfinity(){
+      if (!money.gteBig(INF_TARGET)){ alert('まだ無限に到達していません'); return; }
+      if (!confirm('無限を取得しますか？（全てリセットされ、無限ポイント +1）')) return;
+      infinityPoints += 1;
+      // full reset (except infinityPoints)
+      money = BigNum.zero();
+      prestigePoints = BigNum.fromNumber(0);
+      prestigeCount = 0;
+      prestigeMult = BigNum.fromNumber(1);
+      lastPrestigeScore = BigNum.zero();
+      upgrades = cloneTemplate();
+      sanitizeUpgrades(upgrades);
+      initUI();
+      saveGame();
+      updateUI_throttled(true);
+      alert('無限を得ました！ 無限ポイント +1');
     }
 
     // auto-buy
@@ -403,7 +476,7 @@
       } catch(e){ console.warn('auto-buy error', e); }
     }, 900);
 
-    // save/load (robust)
+    // save/load
     function saveGame(){
       try {
         const save = {
@@ -417,12 +490,13 @@
           prestigePoints: prestigePoints.toObject(),
           prestigeCount,
           prestigeMult: prestigeMult.toObject(),
-          lastGlobalPrestigeScore: lastGlobalPrestigeScore.toObject(),
+          lastPrestigeScore: lastPrestigeScore.toObject(),
+          infinityPoints,
           speedMultiplier,
           paused
         };
         localStorage.setItem('idle_all_big_save', JSON.stringify(save));
-      } catch(e){ console.warn('save fail', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e2){} }
+      } catch(e){ console.warn('save fail', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
 
     function loadGame(){
@@ -454,62 +528,36 @@
         if (data.prestigePoints && typeof data.prestigePoints.m === 'number') prestigePoints = BigNum.fromObject(data.prestigePoints);
         if (typeof data.prestigeCount === 'number') prestigeCount = data.prestigeCount;
         if (data.prestigeMult && typeof data.prestigeMult.m === 'number') prestigeMult = BigNum.fromObject(data.prestigeMult);
-        if (data.lastGlobalPrestigeScore && typeof data.lastGlobalPrestigeScore.m === 'number') lastGlobalPrestigeScore = BigNum.fromObject(data.lastGlobalPrestigeScore);
+        if (data.lastPrestigeScore && typeof data.lastPrestigeScore.m === 'number') lastPrestigeScore = BigNum.fromObject(data.lastPrestigeScore);
 
-        if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, data.speedMultiplier)); // keep in [1,3]
+        if (typeof data.infinityPoints === 'number') infinityPoints = data.infinityPoints;
+        if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, Math.round(data.speedMultiplier)));
         if (typeof data.paused === 'boolean') paused = !!data.paused;
 
         sanitizeUpgrades(upgrades);
       } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
 
-    // init
+    // simulation + render
     sanitizeUpgrades(upgrades);
     initUI();
     loadGame();
     updateUI_throttled(true);
     for (let i=0;i<upgrades.length;i++){ prevProgress[i]=upgrades[i].progress; currProgress[i]=upgrades[i].progress; }
 
-    // speed controls wiring (1-3x)
-    const speedSelect = document.getElementById('speedSelect');
-    const speedInc = document.getElementById('speedInc');
-    const speedDec = document.getElementById('speedDec');
-    const pauseBtn = document.getElementById('pauseBtn');
-
-    function clampSpeed(v){ return Math.max(1, Math.min(3, Math.round(v))); }
-    function updateSpeedUI(force){
-      speedMultiplier = clampSpeed(speedMultiplier);
-      // set select
-      speedSelect.value = String(speedMultiplier);
-      pauseBtn.textContent = paused ? '再開' : '一時停止';
-      if (force) updateUI_throttled(true);
-      saveGame();
-    }
-    speedSelect.addEventListener('change', ()=> { speedMultiplier = clampSpeed(Number(speedSelect.value)); updateSpeedUI(true); });
-    speedInc.addEventListener('click', ()=> { speedMultiplier = clampSpeed(speedMultiplier + 1); updateSpeedUI(true); });
-    speedDec.addEventListener('click', ()=> { speedMultiplier = clampSpeed(speedMultiplier - 1); updateSpeedUI(true); });
-    pauseBtn.addEventListener('click', ()=> { paused = !paused; if (paused) accumulator = 0; updateSpeedUI(true); });
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === '['){ speedMultiplier = clampSpeed(speedMultiplier - 1); updateSpeedUI(true); e.preventDefault(); }
-      else if (e.key === ']'){ speedMultiplier = clampSpeed(speedMultiplier + 1); updateSpeedUI(true); e.preventDefault(); }
-      else if (e.code === 'Space'){ paused = !paused; if (paused) accumulator = 0; updateSpeedUI(true); e.preventDefault(); }
-    });
-
-    // simulation & render
     const FIXED_DT = 0.05;
     let accumulator = 0;
     let lastTime = performance.now();
 
     function simulateStep(dt){
-      // s = speedMultiplier (1..3)
       const s = speedMultiplier;
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
         prevProgress[i] = currProgress[i];
-        const progRate = (u._rateBN && u._rateBN.toNumberSafe) ? u._rateBN.toNumberSafe() : 0;
+        // robust progRate: fallback to baseRate if toNumberSafe is not finite
+        let progRate = (u._rateBN && typeof u._rateBN.toNumberSafe === 'function') ? u._rateBN.toNumberSafe() : NaN;
+        if (!isFinite(progRate) || progRate <= 0) progRate = (u.baseRate || 0.01);
         let incProg = progRate * dt * 100 * s;
-        // avoid NaN/infinite jumps
         if (!isFinite(incProg)) incProg = 0;
         currProgress[i] += incProg;
         if (currProgress[i] > PROGRESS_CAP) currProgress[i] = PROGRESS_CAP;
@@ -525,7 +573,7 @@
         u.progress = currProgress[i];
       }
 
-      // compute total multiplier product
+      // compute product
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -559,12 +607,8 @@
           accumulator -= FIXED_DT;
         }
       } else {
-        // When paused, avoid accumulator growing (prevents interpolation issues)
         accumulator = 0;
-        // keep prevProgress = currProgress so interpolation yields stable visuals
-        for (let i=0;i<upgrades.length;i++){
-          prevProgress[i] = currProgress[i];
-        }
+        for (let i=0;i<upgrades.length;i++) prevProgress[i] = currProgress[i];
       }
 
       const alpha = FIXED_DT === 0 ? 0 : (accumulator / FIXED_DT);
@@ -603,29 +647,38 @@
     requestAnimationFrame(render);
 
     // wiring
-    document.getElementById('globalPrestigeBtn').addEventListener('click', ()=> doGlobalPrestige(false));
+    const prestigeBtn = document.getElementById('prestigeBtn');
+    prestigeBtn.addEventListener('click', ()=> doPrestige(false));
+    document.getElementById('gainInfinityBtn').addEventListener('click', gainInfinity);
     window.addEventListener('beforeunload', ()=> saveGame());
 
-    // debug params
-    const params = new URLSearchParams(location.search);
-    if (params.get('money')){
-      const m = Number(params.get('money'));
-      if (isFinite(m)) money = BigNum.fromNumber(m);
-      displayMoneyNum = money.toNumberSafe ? (isFinite(money.toNumberSafe()) ? money.toNumberSafe() : 0) : 0;
-      updateUI_throttled(true);
+    // speed UI
+    const speedSelect = document.getElementById('speedSelect');
+    const speedInc = document.getElementById('speedInc');
+    const speedDec = document.getElementById('speedDec');
+    const pauseBtn = document.getElementById('pauseBtn');
+    function clampSpeed(v){ return Math.max(1, Math.min(3, Math.round(v))); }
+    function updateSpeedUI(force){
+      speedMultiplier = clampSpeed(speedMultiplier);
+      speedSelect.value = String(speedMultiplier);
+      pauseBtn.textContent = paused ? '再開' : '一時停止';
+      if (force) updateUI_throttled(true);
+      saveGame();
     }
-    if (params.get('forceGlobal') === '1') setTimeout(()=> doGlobalPrestige(true), 200);
+    speedSelect.addEventListener('change', ()=> { speedMultiplier = clampSpeed(Number(speedSelect.value)); updateSpeedUI(true); });
+    speedInc.addEventListener('click', ()=> { speedMultiplier = clampSpeed(speedMultiplier + 1); updateSpeedUI(true); });
+    speedDec.addEventListener('click', ()=> { speedMultiplier = clampSpeed(speedMultiplier - 1); updateSpeedUI(true); });
+    pauseBtn.addEventListener('click', ()=> { paused = !paused; if (paused) accumulator = 0; updateSpeedUI(true); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '['){ speedMultiplier = clampSpeed(speedMultiplier - 1); updateSpeedUI(true); e.preventDefault(); }
+      else if (e.key === ']'){ speedMultiplier = clampSpeed(speedMultiplier + 1); updateSpeedUI(true); e.preventDefault(); }
+      else if (e.code === 'Space'){ paused = !paused; if (paused) accumulator = 0; updateSpeedUI(true); e.preventDefault(); }
+    });
 
-    // ensure UI speed reflects loaded state
+    // initialize speed UI from saved state
     updateSpeedUI(true);
 
-    // -----------------------
-    // missing functions that are referenced earlier (placed here)
-    // -----------------------
-    // getMultiplierIncrementBig already defined above
-    // cost functions defined above
-    // doGlobalPrestige, tryAscend, etc. are above
-    // (they are defined earlier; this note is only for clarity)
+    // done
   } catch(err){
     showError(err && err.message ? err.message : String(err));
   }
