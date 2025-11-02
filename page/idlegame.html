@@ -1,64 +1,85 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>💰 放置マネーゲーム（レベル依存乗数増加）</title>
+<meta charset="utf-8" />
+<title>💰 放置マネーゲーム（転生復活版）</title>
 <style>
   body { font-family:"Segoe UI",sans-serif; background:#111; color:#fff; text-align:center; margin:0; padding:20px; }
   h1 { color:#00e676; text-shadow:0 0 8px #00e676; }
-  .stats { margin:20px auto; padding:10px 20px; background:rgba(255,255,255,0.05); border-radius:12px; width:400px; }
+  .stats { margin:20px auto; padding:10px 20px; background:rgba(255,255,255,0.05); border-radius:12px; width:420px; }
   .money { font-size:1.8em; color:#00e676; font-weight:bold; }
   .formula { font-size:0.9em; color:#ccc; margin-top:5px; }
-  .upgrade { background:rgba(255,255,255,0.07); border-radius:10px; padding:12px; margin:10px auto; width:90%; max-width:500px; box-shadow:0 0 6px rgba(0,0,0,0.4); }
+  .upgrade { background:rgba(255,255,255,0.07); border-radius:10px; padding:12px; margin:10px auto; width:90%; max-width:520px; box-shadow:0 0 6px rgba(0,0,0,0.4); }
   .meter { background:rgba(255,255,255,0.1); border-radius:10px; height:18px; overflow:hidden; margin:8px 0; }
-  .fill { height:100%; background:linear-gradient(90deg,#00e676,#00bfa5); width:0%; transition:width 0.1s linear; }
+  .fill { height:100%; background:linear-gradient(90deg,#00e676,#00bfa5); width:0%; transition:width 0.12s linear; }
   button { background:linear-gradient(90deg,#00e676,#00bfa5); border:none; border-radius:6px; color:black; font-weight:bold; padding:6px 12px; cursor:pointer; }
-  button:hover { transform:scale(1.03); }
+  .prestige { margin-top:14px; background:linear-gradient(90deg,#ffca28,#f57f17); border:none; border-radius:10px; padding:10px 18px; color:#000; font-weight:bold; cursor:pointer; }
+  .prestige:disabled { opacity:0.5; cursor:not-allowed; }
+  .small { font-size:0.9em; color:#ccc; }
 </style>
 </head>
 <body>
-  <h1>💰 放置マネーゲーム</h1>
+  <h1>💰 放置マネーゲーム（転生復活版）</h1>
+
   <div class="stats">
     <div>所持金：<span class="money" id="money">0</span></div>
     <div>1秒あたりの収入：<span id="rate">0</span></div>
     <div class="formula" id="formula">(計算式)</div>
+    <div class="small">転生ポイント：<span id="prestigePoints">0</span></div>
+    <div class="small">転生倍率（永続）：×<span id="prestigeMult">1</span></div>
   </div>
 
   <div id="upgradeContainer"></div>
 
-<script>
-let money = 0;
-let baseIncome = 1;
+  <div style="margin-top:12px;">
+    <button id="prestigeBtn" class="prestige" onclick="doPrestige()">✨ 転生する（条件: 1.8e308）</button>
+  </div>
 
-// アップグレード定義
-let upgrades = [
-  { name:"収入アップ", rate:1, mult:0, speedMult:1.5, baseCost:10, level:0, progress:0 },
-  { name:"効率アップ", rate:0.8, mult:0, speedMult:1.4, baseCost:30, level:0, progress:0 },
-  { name:"自動販売機", rate:0.6, mult:0, speedMult:1.3, baseCost:100, level:0, progress:0 },
-  { name:"銀行投資", rate:0.4, mult:0, speedMult:1.25, baseCost:500, level:0, progress:0 },
-  { name:"AI生成工場", rate:0.2, mult:0, speedMult:1.2, baseCost:2000, level:0, progress:0 },
+  <div style="margin-top:10px;" class="small">
+    （注）デバッグで即転生させたい場合は URL に <code>?forcePrestige=1</code> を付けるか、
+    ブラウザの開発コンソールから <code>doPrestige(true)</code> を呼んでください。
+  </div>
+
+<script>
+// -------------------- テンプレート定義 --------------------
+const upgradesTemplate = [
+  { name:"収入アップ", baseRate:1.0, rate:1.0, mult:0, speedMult:1.5, baseCost:10, level:0, progress:0 },
+  { name:"効率アップ", baseRate:0.8, rate:0.8, mult:0, speedMult:1.4, baseCost:30, level:0, progress:0 },
+  { name:"自動販売機", baseRate:0.6, rate:0.6, mult:0, speedMult:1.3, baseCost:100, level:0, progress:0 },
+  { name:"銀行投資", baseRate:0.4, rate:0.4, mult:0, speedMult:1.25, baseCost:500, level:0, progress:0 },
+  { name:"AI生成工場", baseRate:0.2, rate:0.2, mult:0, speedMult:1.2, baseCost:2000, level:0, progress:0 },
 ];
 
-function getUpgradeCost(u){ return Math.floor(u.baseCost * Math.pow(2.2, u.level)); }
+// deep copy helper
+function cloneTemplate() { return JSON.parse(JSON.stringify(upgradesTemplate)); }
 
+// -------------------- ゲーム状態 --------------------
+let money = 0;
+let baseIncome = 1;
+let upgrades = cloneTemplate();
+let prestigePoints = 0;
+let prestigeMultiplier = 1;
+
+// -------------------- ユーティリティ --------------------
 function formatNum(n){
+  if (typeof n !== 'number') return String(n);
   if (!isFinite(n)) return "Infinity";
-  if (n >= 1e9) return n.toExponential(2);
+  if (Math.abs(n) >= 1e9) return n.toExponential(2);
   return Math.floor(n).toLocaleString();
 }
+function getUpgradeCost(u){ return Math.floor(u.baseCost * Math.pow(2.2, u.level)); }
 
-function updateDisplay() {
+// -------------------- 表示 --------------------
+function updateDisplay(){
   document.getElementById("money").textContent = formatNum(money);
-
-  // 総乗数（掛け算）
-  const totalMult = upgrades.reduce((acc, u) => acc * (1 + u.mult), 1);
-  const incomePerSecond = baseIncome * totalMult;
-
-  document.getElementById("rate").textContent = incomePerSecond.toFixed(2);
+  const totalMult = upgrades.reduce((acc,u) => acc * (1 + u.mult), 1) * prestigeMultiplier;
+  document.getElementById("rate").textContent = (baseIncome * totalMult).toFixed(2);
   document.getElementById("formula").textContent =
-    `収入 = ${baseIncome} × ` + upgrades.map(u=>`(1+${u.mult.toFixed(3)})`).join(" × ") + ` = ${incomePerSecond.toFixed(2)}`;
+    `収入 = ${baseIncome} × ` + upgrades.map(u=>`(1+${u.mult.toFixed(3)})`).join(" × ") + ` × ${prestigeMultiplier.toFixed(2)}`;
+  document.getElementById("prestigePoints").textContent = prestigePoints;
+  document.getElementById("prestigeMult").textContent = prestigeMultiplier.toFixed(2);
 
-  // アップグレード一覧描画
+  // アップグレード描画
   const container = document.getElementById("upgradeContainer");
   container.innerHTML = "";
   upgrades.forEach((u,i)=>{
@@ -67,69 +88,130 @@ function updateDisplay() {
     const cost = getUpgradeCost(u);
     div.innerHTML = `
       <h3>${u.name} (Lv ${u.level})</h3>
-      <div>現在の乗数加算値合計: +${u.mult.toFixed(3)}</div>
-      <div>メーター充填速度: ${u.rate.toFixed(2)}%/s</div>
-      <div class="meter"><div class="fill" id="fill${i}" style="width:${Math.min(u.progress,100)}%;"></div></div>
-      <button onclick="buyUpgrade(${i})">購入 (${cost.toLocaleString()}円)</button>
+      <div class="small">乗数合計: +${u.mult.toFixed(3)}</div>
+      <div class="small">メーター速度: ${u.rate.toFixed(2)} /s</div>
+      <div class="meter"><div id="fill${i}" class="fill" style="width:${Math.min(u.progress,100)}%"></div></div>
+      <button onclick="buyUpgrade(${i})">購入（${cost.toLocaleString()}）</button>
     `;
     container.appendChild(div);
   });
+
+  // 転生ボタンの有効化判定（1.8e308 または Infinity を許容）
+  const prestigeBtn = document.getElementById("prestigeBtn");
+  const canPrestige = (!isFinite(money) || money >= 1.8e308);
+  prestigeBtn.disabled = !canPrestige;
 }
 
+// -------------------- 購入 --------------------
 function buyUpgrade(i){
   const u = upgrades[i];
   const cost = getUpgradeCost(u);
-  if(money >= cost){
+  if (money >= cost){
     money -= cost;
     u.level++;
-    // レベルに応じてメーター速度を増加（控えめに）
-    u.rate *= u.speedMult;
+    u.rate *= u.speedMult; // レベルに応じてメーター充填速度を上がる
+    saveGame();
     updateDisplay();
   } else {
-    alert("お金が足りません！");
+    alert("お金が足りません。");
   }
 }
 
-// 乗数増分をレベルに応じて決める関数
+// -------------------- 乗数増分ルール --------------------
 function getMultiplierIncrement(u){
-  // 基本増分 0.01 にレベル依存で増やす (level 0 -> 0.01, level1 -> 0.02, ...)
+  // 要望どおり：基本0.01にレベル依存（level0->0.01, level1->0.02...）
   return 0.01 * (1 + u.level);
 }
 
+// -------------------- 転生 --------------------
+function doPrestige(force=false){
+  if (!force) {
+    // 通常時は条件チェック。JSの表現上、1.8e308 は Infinity になりうるため両方チェック。
+    if (!(money >= 1.8e308 || !isFinite(money))) {
+      alert("転生条件に達していません（通常は 1.8e308 ）。");
+      return;
+    }
+    if (!confirm("本当に転生しますか？ 所持金とアップグレードはリセットされます。")) return;
+  }
+  // 転生ポイント +1（要望）
+  prestigePoints += 1;
+  // ここでは転生倍率を永続的に+"1"する（希望があれば変更可）
+  prestigeMultiplier += 1;
+
+  // リセット：初期テンプレートに戻す
+  money = 0;
+  upgrades = cloneTemplate();
+  saveGame();
+  updateDisplay();
+
+  alert("転生完了！ 転生ポイント +1 / 転生倍率 +1");
+}
+
+// -------------------- セーブ/ロード --------------------
+function saveGame(){
+  try {
+    const save = { money, baseIncome, upgrades, prestigePoints, prestigeMultiplier };
+    localStorage.setItem("idleMultiMeterSave", JSON.stringify(save));
+  } catch(e){ console.warn("save failed", e); }
+}
+
+function loadGame(){
+  try {
+    const raw = localStorage.getItem("idleMultiMeterSave");
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (typeof data.money === 'number') money = data.money;
+    if (typeof data.baseIncome === 'number') baseIncome = data.baseIncome;
+    if (Array.isArray(data.upgrades) && data.upgrades.length === upgradesTemplate.length) upgrades = data.upgrades;
+    if (typeof data.prestigePoints === 'number') prestigePoints = data.prestigePoints;
+    if (typeof data.prestigeMultiplier === 'number') prestigeMultiplier = data.prestigeMultiplier;
+  } catch(e){ console.warn("load failed", e); }
+}
+
+// -------------------- メインループ --------------------
+loadGame();
 let last = Date.now();
 function loop(){
   const now = Date.now();
-  const delta = (now - last)/1000;
+  const delta = (now - last) / 1000;
   last = now;
 
-  // 各メーター更新（rate の単位は "%/s" として100で満タン）
+  // 各メーター更新（u.rate は "progress % per second" の素）
   upgrades.forEach(u=>{
-    u.progress += u.rate * delta * 100; // rateを "1/s" -> progress% 単位に換算 (rate * delta *100)
-    // もし100%以上溜まっていたら複数回分処理
-    while(u.progress >= 100){
+    // メーターは 0..100 (percent)
+    u.progress += u.rate * delta * 100;
+    // 100%以上溜まったら複数回処理
+    while (u.progress >= 100){
       u.progress -= 100;
       const inc = getMultiplierIncrement(u);
       u.mult += inc;
     }
   });
 
-  // 収入加算（掛け算の合計）
-  const totalMult = upgrades.reduce((acc, u) => acc * (1 + u.mult), 1);
+  // 収入加算（掛け算に prestigeMultiplier をかける）
+  const totalMult = upgrades.reduce((acc,u) => acc * (1 + u.mult), 1) * prestigeMultiplier;
   money += baseIncome * totalMult * delta;
 
-  // メーターUI更新（複数レンダリング対象があるので後で updateDisplay でも反映）
+  // UI メーター描画（高速更新）
   upgrades.forEach((u,i)=>{
-    const fill = document.getElementById("fill"+i);
-    if(fill) fill.style.width = Math.min(u.progress,100) + "%";
+    const el = document.getElementById("fill"+i);
+    if (el) el.style.width = Math.min(u.progress,100) + "%";
   });
 
   updateDisplay();
+  // 5秒おきに自動保存（軽負荷）
+  if (now % 5000 < 50) saveGame();
   requestAnimationFrame(loop);
 }
-
-// 初期描画とループ開始
 updateDisplay();
 loop();
+
+// -------------------- デバッグURLサポート --------------------
+const params = new URLSearchParams(location.search);
+if (params.get("forcePrestige") === "1" || params.get("forcePrestige") === "true") {
+  // UI初期化後に強制実行
+  setTimeout(()=> doPrestige(true), 200);
+}
 </script>
 </body>
 </html>
