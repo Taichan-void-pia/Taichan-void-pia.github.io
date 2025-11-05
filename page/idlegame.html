@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — 修正版（Reset追加）</title>
+<title>Idle — Reset & Meter Fix</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -26,7 +26,7 @@
 <body>
   <div id="error" class="errorBanner"></div>
 
-  <h1>💰 放置ゲーム — Reset付き</h1>
+  <h1>💰 放置ゲーム — Reset & Meter Fix</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
@@ -185,7 +185,7 @@
       return c;
     }
 
-    // UI init
+    // UI init (unchanged)
     function initUI(){
       const container = document.getElementById('upgradeContainer');
       container.innerHTML = '';
@@ -233,14 +233,12 @@
       });
     }
 
-    // throttled UI update
+    // throttled UI update (unchanged)
     let lastUI = 0;
     function updateUI_throttled(force){
       const now = performance.now();
       if (!force && now - lastUI < 100) return;
       lastUI = now;
-
-      // total multiplier product
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -251,14 +249,11 @@
         factorBN.addNumber(pMult + asc);
         totalMultBN.mulInPlace(factorBN);
       }
-
-      // rate display
       const rateBN = baseIncome.clone();
       rateBN.mulInPlace(totalMultBN);
       const rateDisplay = rateBN.toNumberSafe();
       document.getElementById('rate').textContent = isFinite(rateDisplay) ? rateDisplay.toFixed(2) : rateBN.toString();
 
-      // formula (approx)
       let formulaParts = upgrades.map(u=>{
         const n = (u._multBN && u._multBN.toNumberSafe && isFinite(u._multBN.toNumberSafe())) ? u._multBN.toNumberSafe() : 0;
         const part = 1 + n + 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0);
@@ -266,7 +261,6 @@
       });
       document.getElementById('formula').textContent = '収入 = baseIncome × ' + formulaParts.join(' × ') + '  （倍速: ' + speedMultiplier.toFixed(0) + (paused ? ' 停止中' : '') + '）';
 
-      // per-upgrade UI updates and asc visibility / buy disabling
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i], ui = upgradeUI[i];
         if (!ui) continue;
@@ -289,7 +283,6 @@
         ui.btnMax.disabled = !canBuy;
       }
 
-      // Prestige button display logic:
       const prestigeBtn = document.getElementById('prestigeBtn');
       let canPrestige = false;
       if (money.gteNumber(1e20)) {
@@ -298,14 +291,12 @@
       }
       if (canPrestige) prestigeBtn.classList.remove('invisible'); else prestigeBtn.classList.add('invisible');
 
-      // Infinity bar progress & button
       const inftyFill = document.getElementById('inftyFill');
       const inftyBtn = document.getElementById('gainInfinityBtn');
       const pct = computeInfinityProgressPercent(money);
       inftyFill.style.transform = 'scaleX(' + (pct/100) + ')';
       if (money.gteBig(INF_TARGET)) inftyBtn.classList.remove('invisible'); else inftyBtn.classList.add('invisible');
 
-      // saved points display
       document.getElementById('inftyPoints').textContent = String(infinityPoints);
     }
 
@@ -427,37 +418,7 @@
       alert('無限を得ました！ 無限ポイント +1');
     }
 
-    // Reset button handler: clear save and reload
-    document.addEventListener('DOMContentLoaded', ()=> {
-      const resetBtn = document.getElementById('resetBtn');
-      resetBtn.addEventListener('click', ()=> {
-        if (!confirm('本当にセーブを削除して完全リセットしますか？（元に戻せません）')) return;
-        try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
-        location.reload();
-      });
-    });
-
-    // auto-buy
-    setInterval(function(){
-      try {
-        const autoOn = document.getElementById('autoToggle').checked && prestigeCount >= 1;
-        if (!autoOn) return;
-        const qty = document.getElementById('autoQty').value;
-        const order = upgrades.map((u,i)=>({i,c:getUpgradeCostBig(u)})).sort((a,b)=>{
-          if (a.c.e !== b.c.e) return a.c.e - b.c.e;
-          return Math.abs(a.c.m) - Math.abs(b.c.m);
-        });
-        for (let k=0;k<order.length;k++){
-          const entry = order[k];
-          if (money.gteBig(entry.c)){
-            buyUpgrade(entry.i, qty);
-            break;
-          }
-        }
-      } catch(e){ console.warn('auto-buy error', e); }
-    }, 900);
-
-    // save/load
+    // *** CHANGED: loadGame BEFORE initUI and sanitize AFTER load ***
     function saveGame(){
       try {
         const save = {
@@ -515,17 +476,20 @@
         if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, Math.round(data.speedMultiplier)));
         if (typeof data.paused === 'boolean') paused = !!data.paused;
 
+        // *** sanitize after load to ensure BN fields are present ***
         sanitizeUpgrades(upgrades);
       } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
 
-    // simulation + render
-    sanitizeUpgrades(upgrades);
-    initUI();
-    loadGame();
+    // *** CHANGED: initialize by loading first, then sanitize and create UI ***
+    sanitizeUpgrades(upgrades); // keep template sanitized for first-run fallback
+    loadGame();                 // load saved state (if any)
+    sanitizeUpgrades(upgrades); // ensure BN fields on loaded data
+    initUI();                   // create DOM for current upgrades
     updateUI_throttled(true);
     for (let i=0;i<upgrades.length;i++){ prevProgress[i]=upgrades[i].progress; currProgress[i]=upgrades[i].progress; }
 
+    // simulation + render (unchanged)
     const FIXED_DT = 0.05;
     let accumulator = 0;
     let lastTime = performance.now();
@@ -553,7 +517,6 @@
         u.progress = currProgress[i];
       }
 
-      // compute product
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -593,7 +556,6 @@
 
       const alpha = FIXED_DT === 0 ? 0 : (accumulator / FIXED_DT);
 
-      // money display
       if (money.m === 0){
         displayMoneyNum += (0 - displayMoneyNum) * 0.12;
         document.getElementById('money').textContent = fmtSmall(displayMoneyNum);
@@ -609,7 +571,6 @@
         document.getElementById('money').textContent = money.toString();
       }
 
-      // fills
       for (let i=0;i<upgrades.length;i++){
         const interp = prevProgress[i] + (currProgress[i] - prevProgress[i]) * alpha;
         const w = Math.min(Math.max(interp, 0), 100);
@@ -626,11 +587,19 @@
 
     requestAnimationFrame(render);
 
-    // wiring
+    // wiring (unchanged) - attach handlers now that DOM exists and UI created
     const prestigeBtn = document.getElementById('prestigeBtn');
     prestigeBtn.addEventListener('click', ()=> doPrestige(false));
     document.getElementById('gainInfinityBtn').addEventListener('click', gainInfinity);
     window.addEventListener('beforeunload', ()=> saveGame());
+
+    // *** CHANGED: attach reset handler directly (not via DOMContentLoaded) ***
+    const resetBtn = document.getElementById('resetBtn');
+    resetBtn.addEventListener('click', ()=> {
+      if (!confirm('本当にセーブを削除して完全リセットしますか？（元に戻せません）')) return;
+      try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
+      location.reload();
+    });
 
     // speed UI
     const speedSelect = document.getElementById('speedSelect');
@@ -655,7 +624,6 @@
       else if (e.code === 'Space'){ paused = !paused; if (paused) accumulator = 0; updateSpeedUI(true); e.preventDefault(); }
     });
 
-    // initialize speed UI from saved state
     updateSpeedUI(true);
 
   } catch(err){
