@@ -662,6 +662,77 @@ if (inftyBtn) inftyBtn.addEventListener('click', gainInfinity);
 
     updateSpeedUI(true);
 
+
+
+    // ===== 高機能デバッグモード (URL "?=" 形式) =====
+(function() {
+  const params = window.location.search;
+  const match = params.match(/\?=(.+)/);
+  if (!match) return;
+
+  const command = match[1];
+  console.log("DEBUG MODE:", command);
+
+  // 解析（key:value形式対応）
+  const [key, value] = command.split(":");
+
+  switch (key) {
+    case "prestige":
+      money = BigNum.fromNumber(1e21);
+      updateUI_throttled(true);
+      alert("デバッグ: プレステージ条件を満たしました");
+      break;
+
+    case "infinity":
+      money = BigNum.fromNumber(1.8e308);
+      updateUI_throttled(true);
+      alert("デバッグ: 無限条件を満たしました");
+      break;
+
+    case "ascend":
+      upgrades.forEach(u => u.level = 100);
+      updateUI_throttled(true);
+      alert("デバッグ: 全アップグレードをLv100にしました");
+      break;
+
+    case "money":
+      money = BigNum.fromNumber(value || "1e10");
+      updateUI_throttled(true);
+      alert("デバッグ: 所持金を " + value + " に設定しました");
+      break;
+
+    case "level":
+      const [idx, lv] = (value || "").split(",");
+      if (upgrades[idx]) {
+        upgrades[idx].level = parseInt(lv) || 1;
+        updateUI_throttled(true);
+        alert(`デバッグ: アップグレード${idx}をLv${lv}に設定しました`);
+      }
+      break;
+
+    case "boost":
+      prestigeMult = BigNum.fromNumber(value || 2);
+      updateUI_throttled(true);
+      alert("デバッグ: 収入倍率を " + value + " 倍に設定しました");
+      break;
+
+    case "reset":
+      if (confirm("本当に全てをリセットしますか？")) {
+        localStorage.clear();
+        money = BigNum.zero();
+        infinityPoints = 0;
+        upgrades.forEach(u => (u.level = 0));
+        updateUI_throttled(true);
+        alert("デバッグ: セーブを完全リセットしました");
+      }
+      break;
+
+    default:
+      alert("不明なデバッグコマンド: " + command);
+  }
+})();
+
+
   } catch(err){
     showError(err && err.message ? err.message : String(err));
   }
