@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — Reset & Meter Fix</title>
+<title>Idle — Reset & Meter Fix (Final)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -26,7 +26,7 @@
 <body>
   <div id="error" class="errorBanner"></div>
 
-  <h1>💰 放置ゲーム — Reset & Meter Fix</h1>
+  <h1>💰 放置ゲーム — Reset & Meter Fix (Final)</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
@@ -42,7 +42,7 @@
   <div class="panel">
     <div style="display:flex;gap:8px;align-items:center">
       <button id="prestigeBtn" class="btn btn-primary invisible">✨ プレステージ</button>
-      <button id="resetBtn" class="btn btn-small">リセット</button>
+      <button id="resetBtn" class="btn btn-small">リセット（完全）</button>
       <label class="small" style="margin-left:8px">Auto-buy:
         <select id="autoQty">
           <option value="1">×1</option><option value="10">×10</option><option value="100">×100</option><option value="max">×Max</option>
@@ -144,8 +144,8 @@
     let paused = false;
 
     let displayMoneyNum = 0;
-    const prevProgress = new Array(upgrades.length).fill(0);
-    const currProgress = new Array(upgrades.length).fill(0);
+    let prevProgress = [];
+    let currProgress = [];
     const upgradeUI = [];
 
     // helpers
@@ -185,7 +185,7 @@
       return c;
     }
 
-    // UI init (unchanged)
+    // UI init
     function initUI(){
       const container = document.getElementById('upgradeContainer');
       container.innerHTML = '';
@@ -231,14 +231,20 @@
         upgradeUI[i].btnMax.addEventListener('click', ()=> buyUpgrade(i,'max'));
         upgradeUI[i].btnAsc.addEventListener('click', ()=> tryAscend(i));
       });
+
+      // ensure prev/curr arrays match new upgrades length
+      prevProgress = new Array(upgrades.length).fill(0);
+      currProgress = new Array(upgrades.length).fill(0);
+      for (let i=0;i<upgrades.length;i++){ prevProgress[i] = upgrades[i].progress || 0; currProgress[i] = upgrades[i].progress || 0; }
     }
 
-    // throttled UI update (unchanged)
+    // throttled UI update
     let lastUI = 0;
     function updateUI_throttled(force){
       const now = performance.now();
       if (!force && now - lastUI < 100) return;
       lastUI = now;
+
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -249,6 +255,7 @@
         factorBN.addNumber(pMult + asc);
         totalMultBN.mulInPlace(factorBN);
       }
+
       const rateBN = baseIncome.clone();
       rateBN.mulInPlace(totalMultBN);
       const rateDisplay = rateBN.toNumberSafe();
@@ -378,47 +385,7 @@
       alert(u.name + ' を昇天しました（昇天回数: ' + u.ascendCount + '）');
     }
 
-    function doPrestige(force){
-      let can = false;
-      if (money.gteNumber(1e20)) {
-        if (prestigeCount === 0) can = true;
-        else { if (money.gteBig(lastPrestigeScore)) can = true; }
-      }
-      if (!force && !can){ alert('プレステージ条件を満たしていません'); return; }
-      if (!force && !confirm('プレステージを実行しますか？（全てリセット、プレステージポイント付与）')) return;
-      const scoreNum = money.toNumberSafe ? money.toNumberSafe() : Infinity;
-      let extra = 1;
-      if (isFinite(scoreNum) && scoreNum >= 1e20) extra = 1 + Math.log10(scoreNum / 1e20);
-      prestigePoints.addNumber(1);
-      prestigeCount += 1;
-      prestigeMult.mulByNumber(extra);
-      lastPrestigeScore = money.clone();
-      money = BigNum.zero();
-      upgrades.forEach(u => { u.level = 0; u.progress = 0; u._rateBN = BigNum.fromNumber(u.baseRate || 1); u._multBN = BigNum.zero(); });
-      initUI();
-      saveGame();
-      updateUI_throttled(true);
-      alert('プレステージ完了: prestigePoints +1, 収入倍率 ×' + extra.toFixed(2));
-    }
-
-    function gainInfinity(){
-      if (!money.gteBig(INF_TARGET)){ alert('まだ無限に到達していません'); return; }
-      if (!confirm('無限を取得しますか？（全てリセットされ、無限ポイント +1）')) return;
-      infinityPoints += 1;
-      money = BigNum.zero();
-      prestigePoints = BigNum.fromNumber(0);
-      prestigeCount = 0;
-      prestigeMult = BigNum.fromNumber(1);
-      lastPrestigeScore = BigNum.zero();
-      upgrades = cloneTemplate();
-      sanitizeUpgrades(upgrades);
-      initUI();
-      saveGame();
-      updateUI_throttled(true);
-      alert('無限を得ました！ 無限ポイント +1');
-    }
-
-    // *** CHANGED: loadGame BEFORE initUI and sanitize AFTER load ***
+    // save/load
     function saveGame(){
       try {
         const save = {
@@ -476,20 +443,18 @@
         if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, Math.round(data.speedMultiplier)));
         if (typeof data.paused === 'boolean') paused = !!data.paused;
 
-        // *** sanitize after load to ensure BN fields are present ***
+        // ensure BN fields exist
         sanitizeUpgrades(upgrades);
       } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
 
-    // *** CHANGED: initialize by loading first, then sanitize and create UI ***
-    sanitizeUpgrades(upgrades); // keep template sanitized for first-run fallback
-    loadGame();                 // load saved state (if any)
-    sanitizeUpgrades(upgrades); // ensure BN fields on loaded data
-    initUI();                   // create DOM for current upgrades
+    // initialize
+    sanitizeUpgrades(upgrades); // template sanitized for first run
+    loadGame();                 // load if existing
+    sanitizeUpgrades(upgrades); // sanitize loaded data
+    initUI();                   // create UI (ensures prev/curr synced)
     updateUI_throttled(true);
-    for (let i=0;i<upgrades.length;i++){ prevProgress[i]=upgrades[i].progress; currProgress[i]=upgrades[i].progress; }
 
-    // simulation + render (unchanged)
     const FIXED_DT = 0.05;
     let accumulator = 0;
     let lastTime = performance.now();
@@ -499,7 +464,8 @@
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
         prevProgress[i] = currProgress[i];
-        let progRate = (u._rateBN && typeof u._rateBN.toNumberSafe === 'function') ? u._rateBN.toNumberSafe() : NaN;
+        let progRate = NaN;
+        try { progRate = (u._rateBN && typeof u._rateBN.toNumberSafe === 'function') ? u._rateBN.toNumberSafe() : NaN; } catch(e){ progRate = NaN; }
         if (!isFinite(progRate) || progRate <= 0) progRate = (u.baseRate || 0.01);
         let incProg = progRate * dt * 100 * s;
         if (!isFinite(incProg)) incProg = 0;
@@ -587,19 +553,58 @@
 
     requestAnimationFrame(render);
 
-    // wiring (unchanged) - attach handlers now that DOM exists and UI created
+    // wiring
     const prestigeBtn = document.getElementById('prestigeBtn');
     prestigeBtn.addEventListener('click', ()=> doPrestige(false));
     document.getElementById('gainInfinityBtn').addEventListener('click', gainInfinity);
     window.addEventListener('beforeunload', ()=> saveGame());
 
-    // *** CHANGED: attach reset handler directly (not via DOMContentLoaded) ***
+    // attach reset handler -> FULL reset in-memory + save removed
     const resetBtn = document.getElementById('resetBtn');
     resetBtn.addEventListener('click', ()=> {
-      if (!confirm('本当にセーブを削除して完全リセットしますか？（元に戻せません）')) return;
+      if (!confirm('本当にセーブを削除してゲームを完全に初期化しますか？（元に戻せません）')) return;
+      // full reset: clear storage + reset all runtime variables + UI + save
       try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
-      location.reload();
+      // runtime reset
+      money = BigNum.zero();
+      baseIncome = BigNum.fromNumber(1);
+      upgrades = cloneTemplate();
+      sanitizeUpgrades(upgrades);
+      prestigePoints = BigNum.fromNumber(0);
+      prestigeCount = 0;
+      prestigeMult = BigNum.fromNumber(1);
+      lastPrestigeScore = BigNum.zero();
+      infinityPoints = 0;
+      speedMultiplier = 1.0;
+      paused = false;
+      displayMoneyNum = 0;
+      prevProgress = new Array(upgrades.length).fill(0);
+      currProgress = new Array(upgrades.length).fill(0);
+      initUI();
+      saveGame();
+      updateUI_throttled(true);
+      alert('ゲームを完全リセットしました。セーブも削除されています。');
     });
+
+    // auto-buy
+    setInterval(function(){
+      try {
+        const autoOn = document.getElementById('autoToggle').checked && prestigeCount >= 1;
+        if (!autoOn) return;
+        const qty = document.getElementById('autoQty').value;
+        const order = upgrades.map((u,i)=>({i,c:getUpgradeCostBig(u)})).sort((a,b)=>{
+          if (a.c.e !== b.c.e) return a.c.e - b.c.e;
+          return Math.abs(a.c.m) - Math.abs(b.c.m);
+        });
+        for (let k=0;k<order.length;k++){
+          const entry = order[k];
+          if (money.gteBig(entry.c)){
+            buyUpgrade(entry.i, qty);
+            break;
+          }
+        }
+      } catch(e){ console.warn('auto-buy error', e); }
+    }, 900);
 
     // speed UI
     const speedSelect = document.getElementById('speedSelect');
