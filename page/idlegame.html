@@ -559,6 +559,37 @@
     document.getElementById('gainInfinityBtn').addEventListener('click', gainInfinity);
     window.addEventListener('beforeunload', ()=> saveGame());
 
+    // --- GAIN INFINITY (定義 + イベント登録) ---
+function gainInfinity(){
+  if (!money.gteBig(INF_TARGET)){ alert('まだ無限に到達していません'); return; }
+  if (!confirm('無限を取得しますか？（全てリセットされ、無限ポイント +1）')) return;
+  infinityPoints += 1;
+  // runtime full reset like fullReset
+  money = BigNum.zero();
+  baseIncome = BigNum.fromNumber(1);
+  upgrades = cloneTemplate();
+  sanitizeUpgrades(upgrades);
+  prestigePoints = BigNum.fromNumber(0);
+  prestigeCount = 0;
+  prestigeMult = BigNum.fromNumber(1);
+  lastPrestigeScore = BigNum.zero();
+  speedMultiplier = 1.0;
+  paused = false;
+  displayMoneyNum = 0;
+  // ensure progress arrays match
+  prevProgress = new Array(upgrades.length).fill(0);
+  currProgress = new Array(upgrades.length).fill(0);
+  initUI();
+  saveGame();
+  updateUI_throttled(true);
+  alert('無限を得ました！ 無限ポイント +1');
+}
+
+// attach listener (after function exists)
+const inftyBtn = document.getElementById('gainInfinityBtn');
+if (inftyBtn) inftyBtn.addEventListener('click', gainInfinity);
+
+
     // attach reset handler -> FULL reset in-memory + save removed
     const resetBtn = document.getElementById('resetBtn');
     resetBtn.addEventListener('click', ()=> {
