@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — Prestige + Fixes</title>
+<title>Idle — Prestige + Infinity (Step3+4)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -23,21 +23,26 @@
   .invisible{display:none}
   .shop{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
   .shop .card{background:rgba(255,255,255,0.03);padding:8px;border-radius:6px}
+  .col{display:flex;flex-direction:column;gap:6px}
 </style>
 </head>
 <body>
   <div id="error" class="errorBanner"></div>
 
-  <h1>💰 放置ゲーム — Prestige & Fixes</h1>
+  <h1>💰 放置ゲーム — Prestige & Infinity (Step3+4)</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
     秒あたり：<span id="rate">0</span>
     <div class="small" id="formula">(計算式)</div>
     <div style="margin-top:8px">
-      無限メーター：<div class="meter" style="display:inline-block;width:40%;margin-left:8px;vertical-align:middle"><div id="inftyFill" class="fill" style="transform:scaleX(0)"></div></div>
+      無限メーター：
+      <div class="meter" style="display:inline-block;width:40%;margin-left:8px;vertical-align:middle">
+        <div id="inftyFill" class="fill" style="transform:scaleX(0)"></div>
+      </div>
+      <span id="inftyPct" class="small" style="margin-left:8px">0%</span>
       <button id="gainInfinityBtn" class="btn btn-primary invisible" style="margin-left:10px">無限を得る</button>
-      <span class="small" style="margin-left:8px">無限ポイント: <span id="inftyPoints">0</span></span>
+      <span class="small" style="margin-left:8px">無限ポイント(IP): <span id="inftyPoints">0</span></span>
     </div>
   </div>
 
@@ -118,8 +123,8 @@
 
     // --------------- constants & templates ---------------
     const INF_TARGET = BigNum.fromMantExp(1.8, 308); // 1.8e308
+    const INF_START  = BigNum.fromMantExp(1.0, 307); // 1e307 -> メーターが増え始める閾値
     const PROGRESS_CAP = 1e9;
-    // cost growth variable (can be adjusted by prestige shop)
     let costBaseMultVar = 1.15;
 
     const upgradesTemplate = [
@@ -144,7 +149,7 @@
     let prestigeCount = 0;
     let prestigeMult = BigNum.fromNumber(1);
     let lastPrestigeScore = BigNum.zero();
-    let infinityPoints = 0;
+    let infinityPoints = 0; // IP
 
     // global prestige bonuses (purchased with prestigePoints)
     const globalPrestige = {
@@ -152,6 +157,13 @@
       rMul: 1.0, // multiplicative to upgrade rate
       costMul: 1.0, // multiplicative to cost (less than 1 reduces cost)
     };
+
+    // --- Infinity / Generators (Step4) ---
+    let generatorPoints = 0; // GP
+    // gens [0] = G1, [1] = G2, ... [9] = G10
+    let generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
+    const genBaseCost = [1,3,10,30,100,300,1000,3000,10000,30000]; // base IP costs
+    const genCostScale = 1.5; // per purchase scale
 
     let speedMultiplier = 1.0; // 1..3
     let paused = false;
@@ -171,6 +183,13 @@
         return Math.floor(n).toLocaleString();
       }
       return String(n);
+    }
+
+    /* BigNum 用の log10 ヘルパー */
+    function bigNumLog10(bn){
+      if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
+      if (bn.m === 0) return -Infinity;
+      return bn.e + Math.log10(Math.abs(bn.m));
     }
 
     function sanitizeUpgrades(list){
@@ -200,10 +219,8 @@
       const factor = Math.pow(costBaseMultVar, Math.max(0, level));
       const c = u._baseCostBN.clone();
       c.mulByNumber(factor);
-      // per-upgrade permanent purchase penalty (stronger now)
       const penalty = 1 + (u.purchasePenalty || 0);
       c.mulByNumber(penalty);
-      // global prestige cost multiplier
       c.mulByNumber(globalPrestige.costMul);
       return c;
     }
@@ -256,7 +273,6 @@
         upgradeUI[i].btnAsc.addEventListener('click', ()=> tryAscend(i));
       });
 
-      // ensure prev/curr arrays match new upgrades length
       prevProgress = new Array(upgrades.length).fill(0);
       currProgress = new Array(upgrades.length).fill(0);
       for (let i=0;i<upgrades.length;i++){ prevProgress[i] = upgrades[i].progress || 0; currProgress[i] = upgrades[i].progress || 0; }
@@ -278,7 +294,6 @@
         const asc = 0.05 * (u.ascendCount || 0);
         const factorBN = BigNum.fromNumber(1);
         factorBN.addInPlace(u._multBN);
-        // add global prestige mAdd as number (applies to all upgrades)
         factorBN.addNumber(pMult + asc + (globalPrestige.mAdd || 0));
         totalMultBN.mulInPlace(factorBN);
       }
@@ -325,10 +340,7 @@
       let canPrestige = false;
       if (money.gteNumber(1e20)) {
         if (prestigeCount === 0) canPrestige = true;
-        else { if (money.gteBig(lastPrestigeScore) && !money.gteBig(lastPrestigeScore)===false && !money.gteBig(lastPrestigeScore)) {
-          // fallback, but we'll require strictly greater below
-        }
-          // require strictly greater than previous prestige score
+        else { 
           if (isMoneyGreaterThan(money, lastPrestigeScore)) canPrestige = true;
         }
       }
@@ -338,31 +350,36 @@
       const inftyBtn = document.getElementById('gainInfinityBtn');
       const pct = computeInfinityProgressPercent(money);
       inftyFill.style.transform = 'scaleX(' + (pct/100) + ')';
+      const pctEl = document.getElementById('inftyPct');
+      if (pctEl) pctEl.textContent = pct.toFixed(2) + '%';
       if (money.gteBig(INF_TARGET)) inftyBtn.classList.remove('invisible'); else inftyBtn.classList.add('invisible');
 
       document.getElementById('inftyPoints').textContent = String(infinityPoints);
 
-      // prestige points display on shop render
       renderPrestigeShop();
     }
 
     function isMoneyGreaterThan(a,b){
-      // return true if BigNum a > BigNum b
       if (!(a instanceof BigNum)) a = BigNum.fromObject(a);
       if (!(b instanceof BigNum)) b = BigNum.fromObject(b);
       if (a.e !== b.e) return a.e > b.e;
       return Math.abs(a.m) > Math.abs(b.m);
     }
 
+    /* ----------------------
+       Step3: 無限メーター進捗計算（対数マッピング）
+    ---------------------- */
     function computeInfinityProgressPercent(bn){
       if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
       if (bn.m === 0) return 0;
-      const diff = bn.e - INF_TARGET.e;
-      if (diff > 0) return 100;
-      // compute ratio robustly using mantissa
-      const ratio = (bn.m / INF_TARGET.m) * Math.pow(10, diff);
-      if (!isFinite(ratio) || ratio <= 0) return 0;
-      return Math.min(100, ratio * 100);
+      const logVal = bigNumLog10(bn);
+      const logStart = bigNumLog10(INF_START);
+      const logTarget = bigNumLog10(INF_TARGET);
+      if (!isFinite(logVal)) return 0;
+      if (logVal < logStart) return 0;
+      if (logVal >= logTarget) return 100;
+      const pct = (logVal - logStart) / (logTarget - logStart) * 100;
+      return Math.max(0, Math.min(100, pct));
     }
 
     function costToBuyBig(u, n){
@@ -377,8 +394,15 @@
       return total;
     }
 
+    /* generator effect multiplies the multiplier increment */
+    function getMultiplierIncrementBig(u){
+      const base = 0.005 * Math.pow(1 + u.level, 0.38);
+      // generatorPoints multiplies increment: factor = 1 + GP * 0.1
+      const genFactor = 1 + (generatorPoints || 0) * 0.1;
+      return BigNum.fromNumber(Math.min(base * genFactor, 1e12));
+    }
+
     function buyUpgrade(idx, qty, silent){
-      // silent = true when auto-buy, avoid alerts
       const u = upgrades[idx];
       if (u.level >= getLevelCap(u)){ if (!silent) alert('このアップグレードは最大Lvです（' + getLevelCap(u) + '）'); return; }
       if (qty === 'max'){
@@ -415,18 +439,12 @@
       updateUI_throttled(true);
     }
 
-    function getMultiplierIncrementBig(u){
-      const base = 0.005 * Math.pow(1 + u.level, 0.38);
-      return BigNum.fromNumber(Math.min(base, 1e12));
-    }
-
     function tryAscend(i){
       const u = upgrades[i];
       if (u.level < getLevelCap(u)){ alert('Lv上限に到達してから昇天可能です（現在 Lv ' + u.level + ' / ' + getLevelCap(u) + '）'); return; }
       if (!confirm(u.name + ' を昇天しますか？ Lvがリセットされ、永続ボーナスが付与されます。')) return;
       u.ascendCount = (u.ascendCount || 0) + 1;
-      // stronger permanent purchase penalty per ascend
-      u.purchasePenalty = (u.purchasePenalty || 0) + 0.25; // +25% per ascend
+      u.purchasePenalty = (u.purchasePenalty || 0) + 0.25;
       u.level = 0;
       u.progress = 0;
       u._rateBN = BigNum.fromNumber(u.baseRate || 1);
@@ -436,21 +454,19 @@
       alert(u.name + ' を昇天しました（昇天回数: ' + u.ascendCount + '）\n該当アップグレードのコストが永続で +25% されました。');
     }
 
-    // PRESTIGE logic (doPrestige): award prestigePoints based on how far above 1e20
+    // PRESTIGE logic
     function prestigePointsForScore(bn){
       if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
       if (bn.m === 0) return 0;
-      // compute log10(bn) - 20, floor +1
       const mantLog = Math.log10(Math.abs(bn.m));
       const log10val = bn.e + mantLog;
       const diff = log10val - 20;
       if (!isFinite(diff) || diff < 0) return 0;
-      const points = Math.floor(diff) + 1; // 1e20 => points=1, 1e21.. => >=2
+      const points = Math.floor(diff) + 1;
       return points;
     }
 
     function doPrestige(force){
-      // canPrestige: first time require >=1e20; subsequent require strictly > lastPrestigeScore
       let can = false;
       if (money.gteNumber(1e20)){
         if (prestigeCount === 0) can = true;
@@ -466,37 +482,41 @@
       prestigeCount += 1;
       lastPrestigeScore = money.clone();
 
-      // reset runtime state (but keep globalPrestige purchases)
+      // reset generation (money/upgrades) but KEEP globalPrestige purchases (user requested earlier to persist?)
+      // The user later asked that prestige purchases are reset on Infinity; here for normal prestige we keep globalPrestige.
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
-      // reset upgrades: clear levels, progress, ascend counts and purchase penalties
       upgrades = cloneTemplate();
       sanitizeUpgrades(upgrades);
-      // reset cost growth var? user wanted cost penalty reset on prestige: reset per-upgrade penalties
-      // keep globalPrestige (shop purchases) intact
-      // reset prestige-related runtime but keep prestigePoints and globalPrestige
-
       saveGame();
       initUI();
       updateUI_throttled(true);
       alert('プレステージ完了: prestigePoints +' + pts + '\n現在のプレステージポイント: ' + prestigePoints);
     }
 
+    // gain Infinity (IP) - Step4 behavior
     function gainInfinity(){
       if (!money.gteBig(INF_TARGET)){ alert('まだ無限に到達していません'); return; }
-      if (!confirm('無限を取得しますか？（全てリセットされ、無限ポイント +1）')) return;
+      if (!confirm('無限を取得しますか？（Generationを全てリセットし、無限ポイント (IP) +1）')) return;
       infinityPoints += 1;
-      // full reset
+
+      // Reset Generation: money, baseIncome, upgrades, prestige purchases (globalPrestige), prestigePoints, prestigeCount, etc.
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
       sanitizeUpgrades(upgrades);
+      // Reset prestige-level things (user requested to reset prestige ups on Infinity)
       prestigePoints = 0;
       prestigeCount = 0;
       prestigeMult = BigNum.fromNumber(1);
       lastPrestigeScore = BigNum.zero();
+
+      // Reset progression / growth variables except IP and INF-specific purchases (generators) should remain
       costBaseMultVar = 1.15;
       globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
+
+      // Note: generators and generatorPoints are NOT reset here (they are purchased with IP).
+      // If you want to also reset generators on Infinity, change here.
       speedMultiplier = 1.0;
       paused = false;
       displayMoneyNum = 0;
@@ -505,10 +525,10 @@
       initUI();
       saveGame();
       updateUI_throttled(true);
-      alert('無限を得ました！ 無限ポイント +1');
+      alert('無限を得ました！ IP +1');
     }
 
-    // RESET (full): clear storage + runtime
+    // RESET (full): clear storage + runtime (including generators & IP)
     function fullReset(){
       try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
       money = BigNum.zero();
@@ -522,6 +542,9 @@
       infinityPoints = 0;
       costBaseMultVar = 1.15;
       globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
+      // reset generators & GP as well
+      generatorPoints = 0;
+      generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
       speedMultiplier = 1.0;
       paused = false;
       displayMoneyNum = 0;
@@ -532,7 +555,7 @@
       updateUI_throttled(true);
     }
 
-    // save/load
+    // Save / Load
     function saveGame(){
       try {
         const save = {
@@ -551,7 +574,10 @@
           globalPrestige,
           costBaseMultVar,
           speedMultiplier,
-          paused
+          paused,
+          // generators
+          generatorPoints,
+          generators
         };
         localStorage.setItem('idle_all_big_save', JSON.stringify(save));
       } catch(e){ console.warn('save fail', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
@@ -595,6 +621,15 @@
         if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, Math.round(data.speedMultiplier)));
         if (typeof data.paused === 'boolean') paused = !!data.paused;
 
+        // load generators
+        if (typeof data.generatorPoints === 'number') generatorPoints = data.generatorPoints;
+        if (Array.isArray(data.generators) && data.generators.length === 10){
+          generators = data.generators.map(g => ({
+            count: Number.isFinite(+g.count) ? Math.max(0, Math.floor(+g.count)) : 0,
+            progress: Number.isFinite(+g.progress) ? +g.progress : 0
+          }));
+        }
+
         sanitizeUpgrades(upgrades);
       } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
@@ -610,14 +645,36 @@
     let accumulator = 0;
     let lastTime = performance.now();
 
+    function simulateGenerators(dt){
+      // G1: produces GP directly. base: 0.01 GP per 10s per G1 => 0.001 GP/s per G1
+      const g1count = generators[0].count || 0;
+      const g1PerSecPer = 0.001;
+      const gpGain = g1count * g1PerSecPer * dt;
+      if (gpGain > 0) generatorPoints += gpGain;
+
+      // G2..G10 produce lower-tier counts: each produces +1 lower per 10s per generator => 0.1 per sec * count
+      for (let tier = 1; tier < 10; tier++){
+        const g = generators[tier];
+        if (!g || g.count <= 0) continue;
+        // progress represents fractional increments to lower-tier count
+        const perSec = 0.1 * g.count; // 1 per 10s per generator
+        g.progress += perSec * dt;
+        if (g.progress >= 1){
+          const inc = Math.floor(g.progress);
+          g.progress -= inc;
+          generators[tier-1].count += inc;
+        }
+      }
+    }
+
     function simulateStep(dt){
       const s = speedMultiplier;
+      // upgrades progression
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
         prevProgress[i] = currProgress[i];
         let progRate = NaN;
         try { progRate = (u._rateBN && typeof u._rateBN.toNumberSafe === 'function') ? u._rateBN.toNumberSafe() : NaN; } catch(e){ progRate = NaN; }
-        // apply global r multiplier here for progression speed
         if (!isFinite(progRate) || progRate <= 0) progRate = (u.baseRate || 0.01);
         progRate *= (globalPrestige.rMul || 1);
         let incProg = progRate * dt * 100 * s;
@@ -636,6 +693,7 @@
         u.progress = currProgress[i];
       }
 
+      // compute income
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -652,6 +710,9 @@
       addBN.mulByNumber(dt * s);
       money.addInPlace(addBN);
       if (money.e > 1000) money = BigNum.fromNumber(1e300);
+
+      // simulate generators
+      simulateGenerators(dt);
     }
 
     function render(){
@@ -707,7 +768,6 @@
     requestAnimationFrame(render);
 
     // wiring
-    // ensure doPrestige exists before wiring the button
     const prestigeBtn = document.getElementById('prestigeBtn');
     prestigeBtn.addEventListener('click', ()=> doPrestige(false));
 
@@ -715,7 +775,6 @@
     if (inftyBtn) inftyBtn.addEventListener('click', gainInfinity);
     window.addEventListener('beforeunload', ()=> saveGame());
 
-    // attach reset handler -> FULL reset in-memory + save removed
     const resetBtn = document.getElementById('resetBtn');
     resetBtn.addEventListener('click', ()=> {
       if (!confirm('本当にセーブを削除してゲームを完全に初期化しますか？（元に戻せません）')) return;
@@ -735,10 +794,9 @@
         });
         for (let k=0;k<order.length;k++){
           const entry = order[k];
-          // skip if at level cap
           if (upgrades[entry.i].level >= getLevelCap(upgrades[entry.i])) continue;
           if (money.gteBig(entry.c)){
-            buyUpgrade(entry.i, qty, true); // silent auto-buy
+            buyUpgrade(entry.i, qty, true);
             break;
           }
         }
@@ -770,22 +828,48 @@
 
     updateSpeedUI(true);
 
-    // ===== Prestige shop UI & logic =====
-    
+    // ===== Prestige + Infinity shop UI & logic =====
+    function genCostForPurchase(tier, qty){
+      // compute sum cost in IP for qty purchases for current count
+      const base = genBaseCost[tier];
+      let total = 0;
+      let cur = generators[tier].count || 0;
+      for (let k=0;k<qty;k++){
+        total += Math.ceil(base * Math.pow(genCostScale, cur + k));
+      }
+      return total;
+    }
+
+    function buyGenerator(tier, qty){
+      qty = Number(qty) || 1;
+      if (qty <= 0) return;
+      const cost = genCostForPurchase(tier, qty);
+      if (infinityPoints < cost){ alert('IPが足りません'); return; }
+      infinityPoints -= cost;
+      generators[tier].count += qty;
+      saveGame();
+      updateUI_throttled(true);
+      alert(`G${tier+1} を ${qty} 個購入しました（IP -${cost}）`);
+    }
+
     function renderPrestigeShop(){
-      
-      const prestigeShopItems = [
-      { id:'m_add', title:'全アップグレード m +0.01', cost:2, apply(){ globalPrestige.mAdd += 0.01; } },
-      { id:'r_mul', title:'全アップグレード r ×1.05', cost:3, apply(){ globalPrestige.rMul *= 1.05; } },
-      { id:'cost_dec', title:'全アップグレード コスト -10%', cost:4, apply(){ globalPrestige.costMul *= 0.90; } },
-      { id:'costGrowth_down', title:'コスト成長率を-0.01', cost:6, apply(){ costBaseMultVar = Math.max(1.01, costBaseMultVar - 0.01); } },
-    　];
-      
       const shop = document.getElementById('prestigeShop');
       if (!shop) return;
       shop.innerHTML = '';
-      const info = document.createElement('div'); info.className='card'; info.textContent = 'プレステージポイント: ' + prestigePoints; shop.appendChild(info);
-      prestigeShopItems.forEach(item => {
+
+      // Prestige info + items
+      const info = document.createElement('div'); info.className='card';
+      info.innerHTML = `<div><strong>プレステージポイント: ${prestigePoints}</strong></div><div class="small">プレステージ回数: ${prestigeCount}</div>`;
+      shop.appendChild(info);
+
+      const prestigeItems = [
+        { id:'m_add', title:'全アップグレード m +0.01', cost:2, apply(){ globalPrestige.mAdd += 0.01; } },
+        { id:'r_mul', title:'全アップグレード r ×1.05', cost:3, apply(){ globalPrestige.rMul *= 1.05; } },
+        { id:'cost_dec', title:'全アップグレード コスト -10%', cost:4, apply(){ globalPrestige.costMul *= 0.90; } },
+        { id:'costGrowth_down', title:'コスト成長率を-0.01', cost:6, apply(){ costBaseMultVar = Math.max(1.01, costBaseMultVar - 0.01); } },
+      ];
+
+      prestigeItems.forEach(item => {
         const card = document.createElement('div'); card.className='card';
         card.innerHTML = `<div><strong>${item.title}</strong></div><div class="small">Cost: ${item.cost} pts</div>`;
         const btn = document.createElement('button'); btn.className='btn btn-small'; btn.textContent='Buy';
@@ -801,9 +885,33 @@
         card.appendChild(btn);
         shop.appendChild(card);
       });
+
+      // Infinity (IP) & Generator shop
+      const ipCard = document.createElement('div'); ipCard.className='card';
+      ipCard.innerHTML = `<div><strong>無限ポイント(IP): ${infinityPoints}</strong></div><div class="small">GP: ${generatorPoints.toFixed(4)}</div>`;
+      shop.appendChild(ipCard);
+
+      // Generators section
+      const genContainer = document.createElement('div'); genContainer.className='card col';
+      genContainer.innerHTML = `<div><strong>Generators (G1〜G10) — IPで購入</strong></div><div class="small">G1はGPを生成。G2..G10は下位ジェネレーターを増やします。</div>`;
+      for (let t=0;t<10;t++){
+        const tier = t;
+        const g = generators[tier];
+        const base = genBaseCost[tier];
+        const nextCost = Math.ceil(base * Math.pow(genCostScale, (g.count||0)));
+        const line = document.createElement('div'); line.style.display='flex'; line.style.gap='8px'; line.style.alignItems='center';
+        line.innerHTML = `<div style="flex:1"><strong>G${tier+1}</strong> — 所持: <span id="gcount${tier}">${g.count}</span></div><div class="small">次: ${nextCost} IP</div>`;
+        const buyBtn = document.createElement('button'); buyBtn.className='btn btn-small'; buyBtn.textContent='Buy ×1';
+        buyBtn.addEventListener('click', ()=> buyGenerator(tier, 1));
+        const buy5 = document.createElement('button'); buy5.className='btn btn-small'; buy5.textContent='Buy ×5';
+        buy5.addEventListener('click', ()=> buyGenerator(tier, 5));
+        line.appendChild(buyBtn); line.appendChild(buy5);
+        genContainer.appendChild(line);
+      }
+      shop.appendChild(genContainer);
     }
 
-    // ===== Debug URL ?= support (keeps from earlier) =====
+    // ===== Debug URL ?= support =====
     (function() {
       const params = window.location.search;
       const match = params.match(/\?=(.+)/);
@@ -831,6 +939,16 @@
           money = BigNum.fromNumber(Number(value) || 1e10);
           updateUI_throttled(true);
           alert("デバッグ: 所持金を " + value + " に設定しました");
+          break;
+        case "addIP":
+          infinityPoints += Number(value) || 1;
+          updateUI_throttled(true);
+          alert("デバッグ: IP を追加しました");
+          break;
+        case "addG1":
+          generators[0].count += Number(value) || 1;
+          updateUI_throttled(true);
+          alert("デバッグ: G1 を追加しました");
           break;
         case "reset":
           if (confirm("本当に全てをリセットしますか？")){
