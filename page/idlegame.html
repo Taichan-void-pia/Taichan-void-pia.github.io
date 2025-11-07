@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — Prestige Shop + Per-upgrade Penalty</title>
+<title>Idle — Prestige + Fixes</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -21,14 +21,14 @@
   .small{font-size:0.85em;color:#cfe8da}
   .speedControls{display:flex;gap:8px;align-items:center}
   .invisible{display:none}
-  .shop{margin-top:8px;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px}
-  .shop button{margin-left:8px}
+  .shop{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+  .shop .card{background:rgba(255,255,255,0.03);padding:8px;border-radius:6px}
 </style>
 </head>
 <body>
   <div id="error" class="errorBanner"></div>
 
-  <h1>💰 放置ゲーム — Prestige Shop + Per-upgrade Penalty</h1>
+  <h1>💰 放置ゲーム — Prestige & Fixes</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
@@ -65,20 +65,12 @@
       <button id="pauseBtn" class="btn btn-small">一時停止</button>
     </div>
 
-    <div class="small" style="width:100%;margin-top:6px">プレステージ初回条件: 1e20（2回目以降は前回プレステージ時のスコア以上） — 昇天はLv上限到達で表示・実行可能</div>
+    <div class="small" style="width:100%;margin-top:6px">プレステージ初回条件: 1e20（2回目以降は前回プレステージ時のスコアより上） — 昇天はLv上限到達で表示・実行可能</div>
   </div>
 
   <div id="upgradeContainer"></div>
 
-  <div id="prestigeShop" class="shop">
-    <strong>プレステージポイント: <span id="prestigePoints">0</span></strong>
-    <div class="small">ショップ：プレステージポイントで永久アップグレードを購入できます。</div>
-    <div style="margin-top:6px">
-      <div>1) baseIncome ×1.10 — cost 3 <button class="btn btn-small" data-item="baseInc">購入</button></div>
-      <div>2) all upgrade rate ×1.05 — cost 5 <button class="btn btn-small" data-item="upRate">購入</button></div>
-      <div>3) cost growth -0.01 (min 1.05) — cost 8 <button class="btn btn-small" data-item="reduceCost">購入</button></div>
-    </div>
-  </div>
+  <div id="prestigeShop" class="shop"></div>
 
 <script>
 (function(){
@@ -127,7 +119,7 @@
     // --------------- constants & templates ---------------
     const INF_TARGET = BigNum.fromMantExp(1.8, 308); // 1.8e308
     const PROGRESS_CAP = 1e9;
-    // cost base multiplier is now variable (can be reduced by prestige shop)
+    // cost growth variable (can be adjusted by prestige shop)
     let costBaseMultVar = 1.15;
 
     const upgradesTemplate = [
@@ -148,14 +140,18 @@
     let money = BigNum.zero();
     let baseIncome = BigNum.fromNumber(1);
     let upgrades = cloneTemplate();
-    let prestigePoints = 0; // integer points for shop
+    let prestigePoints = 0; // integer points user can spend in shop
     let prestigeCount = 0;
     let prestigeMult = BigNum.fromNumber(1);
     let lastPrestigeScore = BigNum.zero();
     let infinityPoints = 0;
 
-    // persistent bonuses bought in prestige shop
-    let prestigeBonuses = { baseIncomeMult: 1, upgradeRateMult: 1 };
+    // global prestige bonuses (purchased with prestigePoints)
+    const globalPrestige = {
+      mAdd: 0,   // additive to upgrade _mult (as number)
+      rMul: 1.0, // multiplicative to upgrade rate
+      costMul: 1.0, // multiplicative to cost (less than 1 reduces cost)
+    };
 
     let speedMultiplier = 1.0; // 1..3
     let paused = false;
@@ -196,8 +192,7 @@
     }
 
     function getLevelCap(u){
-      const base = 100;
-      return base + (u.ascendCount || 0) * 10;
+      return 100 + (u.ascendCount || 0) * 10;
     }
 
     function getUpgradeCostBig(u, extraLevelOffset=0){
@@ -205,9 +200,11 @@
       const factor = Math.pow(costBaseMultVar, Math.max(0, level));
       const c = u._baseCostBN.clone();
       c.mulByNumber(factor);
-      // apply per-upgrade persistent purchase penalty (e.g. 0.10 -> +10%)
-      const penalty = (typeof u.purchasePenalty === 'number') ? u.purchasePenalty : 0;
-      if (penalty && penalty !== 0) c.mulByNumber(1 + penalty);
+      // per-upgrade permanent purchase penalty (stronger now)
+      const penalty = 1 + (u.purchasePenalty || 0);
+      c.mulByNumber(penalty);
+      // global prestige cost multiplier
+      c.mulByNumber(globalPrestige.costMul);
       return c;
     }
 
@@ -220,13 +217,12 @@
         div.className = 'upgrade';
         const rateStr = (u._rateBN && u._rateBN.toNumberSafe && isFinite(u._rateBN.toNumberSafe())) ? u._rateBN.toNumberSafe().toFixed(2) : u._rateBN.toString();
         div.innerHTML = `
-          <div style="display:flex;justify-content:space-between"><strong>${i+1}. ${u.name}</strong><div class="small">Lv <span id="lvl${i}">0</span></div></div>
+          <div style="display:flex;justify-content:space-between"><strong>${i+1}. ${u.name}</strong><div class="small">Lv <span id="lvl${i}">0</span>/<span id="cap${i}">100</span></div></div>
           <div class="small">昇天回数: <span id="asc${i}">0</span></div>
           <div class="small">永続 Lv(m/r/c): <span id="pLv${i}">0</span>/<span id="pLvR${i}">0</span>/<span id="pLvC${i}">0</span></div>
           <div class="small">乗数合計: <span id="mult${i}">+0.000</span></div>
           <div class="small">メーター速度: <span id="rate${i}">${rateStr}</span>/s</div>
           <div class="meter"><div id="fill${i}" class="fill" style="transform:scaleX(0)"></div></div>
-          <div class="small">購入ペナルティ: <span id="pen${i}">0%</span></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
             <button id="buy1_${i}" class="btn btn-primary">購入（<span id="cost${i}">0</span>）</button>
             <button id="buy10_${i}" class="btn btn-small">×10</button>
@@ -239,6 +235,7 @@
         upgradeUI[i] = {
           fillEl: document.getElementById('fill'+i),
           lvlEl: document.getElementById('lvl'+i),
+          capEl: document.getElementById('cap'+i),
           costEl: document.getElementById('cost'+i),
           multEl: document.getElementById('mult'+i),
           rateEl: document.getElementById('rate'+i),
@@ -246,17 +243,16 @@
           pLvEl: document.getElementById('pLv'+i),
           pLvREl: document.getElementById('pLvR'+i),
           pLvCEl: document.getElementById('pLvC'+i),
-          penEl: document.getElementById('pen'+i),
           btn1: document.getElementById('buy1_'+i),
           btn10: document.getElementById('buy10_'+i),
           btn100: document.getElementById('buy100_'+i),
           btnMax: document.getElementById('buyMax_'+i),
           btnAsc: document.getElementById('asc_'+i),
         };
-        upgradeUI[i].btn1.addEventListener('click', ()=> buyUpgrade(i,1));
-        upgradeUI[i].btn10.addEventListener('click', ()=> buyUpgrade(i,10));
-        upgradeUI[i].btn100.addEventListener('click', ()=> buyUpgrade(i,100));
-        upgradeUI[i].btnMax.addEventListener('click', ()=> buyUpgrade(i,'max'));
+        upgradeUI[i].btn1.addEventListener('click', ()=> buyUpgrade(i,1,false));
+        upgradeUI[i].btn10.addEventListener('click', ()=> buyUpgrade(i,10,false));
+        upgradeUI[i].btn100.addEventListener('click', ()=> buyUpgrade(i,100,false));
+        upgradeUI[i].btnMax.addEventListener('click', ()=> buyUpgrade(i,'max',false));
         upgradeUI[i].btnAsc.addEventListener('click', ()=> tryAscend(i));
       });
 
@@ -264,6 +260,8 @@
       prevProgress = new Array(upgrades.length).fill(0);
       currProgress = new Array(upgrades.length).fill(0);
       for (let i=0;i<upgrades.length;i++){ prevProgress[i] = upgrades[i].progress || 0; currProgress[i] = upgrades[i].progress || 0; }
+
+      renderPrestigeShop();
     }
 
     // throttled UI update
@@ -280,20 +278,19 @@
         const asc = 0.05 * (u.ascendCount || 0);
         const factorBN = BigNum.fromNumber(1);
         factorBN.addInPlace(u._multBN);
-        factorBN.addNumber(pMult + asc);
+        // add global prestige mAdd as number (applies to all upgrades)
+        factorBN.addNumber(pMult + asc + (globalPrestige.mAdd || 0));
         totalMultBN.mulInPlace(factorBN);
       }
 
-      // apply prestigeBonuses.baseIncomeMult
       const rateBN = baseIncome.clone();
       rateBN.mulInPlace(totalMultBN);
-      rateBN.mulByNumber(prestigeBonuses.baseIncomeMult);
       const rateDisplay = rateBN.toNumberSafe();
       document.getElementById('rate').textContent = isFinite(rateDisplay) ? rateDisplay.toFixed(2) : rateBN.toString();
 
       let formulaParts = upgrades.map(u=>{
         const n = (u._multBN && u._multBN.toNumberSafe && isFinite(u._multBN.toNumberSafe())) ? u._multBN.toNumberSafe() : 0;
-        const part = 1 + n + 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0);
+        const part = 1 + n + 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0) + (globalPrestige.mAdd || 0);
         return '(1+' + part.toFixed(3) + ')';
       });
       document.getElementById('formula').textContent = '収入 = baseIncome × ' + formulaParts.join(' × ') + '  （倍速: ' + speedMultiplier.toFixed(0) + (paused ? ' 停止中' : '') + '）';
@@ -301,17 +298,20 @@
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i], ui = upgradeUI[i];
         if (!ui) continue;
-        ui.lvlEl.textContent = u.level + '/' + getLevelCap(u);
+        ui.lvlEl.textContent = u.level;
+        ui.capEl.textContent = getLevelCap(u);
         ui.costEl.textContent = getUpgradeCostBig(u,0).toString();
         const multNum = u._multBN.toNumberSafe();
         ui.multEl.textContent = '+' + (isFinite(multNum) ? multNum.toFixed(3) : u._multBN.toString());
-        const rateNum = u._rateBN.toNumberSafe();
-        ui.rateEl.textContent = isFinite(rateNum) ? (rateNum * prestigeBonuses.upgradeRateMult).toFixed(2) : u._rateBN.toString();
+        // apply global r multiplier when showing rate
+        const rateClone = u._rateBN.clone();
+        rateClone.mulByNumber(globalPrestige.rMul || 1);
+        const rateNum = rateClone.toNumberSafe();
+        ui.rateEl.textContent = isFinite(rateNum) ? rateNum.toFixed(2) : rateClone.toString();
         ui.ascEl.textContent = u.ascendCount || 0;
         ui.pLvEl.textContent = (u.prestigeLevel && u.prestigeLevel.mult) || 0;
         ui.pLvREl.textContent = (u.prestigeLevel && u.prestigeLevel.rate) || 0;
         ui.pLvCEl.textContent = (u.prestigeLevel && u.prestigeLevel.cost) || 0;
-        ui.penEl.textContent = ((u.purchasePenalty || 0) * 100).toFixed(0) + '%';
 
         if (u.level >= getLevelCap(u)) ui.btnAsc.classList.remove('invisible'); else ui.btnAsc.classList.add('invisible');
         const canBuy = u.level < getLevelCap(u);
@@ -321,26 +321,37 @@
         ui.btnMax.disabled = !canBuy;
       }
 
-      // Prestige button display logic:
       const prestigeBtn = document.getElementById('prestigeBtn');
       let canPrestige = false;
       if (money.gteNumber(1e20)) {
         if (prestigeCount === 0) canPrestige = true;
-        else { if (money.gteBig(lastPrestigeScore)) canPrestige = true; }
+        else { if (money.gteBig(lastPrestigeScore) && !money.gteBig(lastPrestigeScore)===false && !money.gteBig(lastPrestigeScore)) {
+          // fallback, but we'll require strictly greater below
+        }
+          // require strictly greater than previous prestige score
+          if (isMoneyGreaterThan(money, lastPrestigeScore)) canPrestige = true;
+        }
       }
       if (canPrestige) prestigeBtn.classList.remove('invisible'); else prestigeBtn.classList.add('invisible');
 
-      // Infinity bar progress & button
       const inftyFill = document.getElementById('inftyFill');
       const inftyBtn = document.getElementById('gainInfinityBtn');
       const pct = computeInfinityProgressPercent(money);
       inftyFill.style.transform = 'scaleX(' + (pct/100) + ')';
       if (money.gteBig(INF_TARGET)) inftyBtn.classList.remove('invisible'); else inftyBtn.classList.add('invisible');
 
-      // prestigePoints display
-      document.getElementById('prestigePoints').textContent = String(prestigePoints);
-
       document.getElementById('inftyPoints').textContent = String(infinityPoints);
+
+      // prestige points display on shop render
+      renderPrestigeShop();
+    }
+
+    function isMoneyGreaterThan(a,b){
+      // return true if BigNum a > BigNum b
+      if (!(a instanceof BigNum)) a = BigNum.fromObject(a);
+      if (!(b instanceof BigNum)) b = BigNum.fromObject(b);
+      if (a.e !== b.e) return a.e > b.e;
+      return Math.abs(a.m) > Math.abs(b.m);
     }
 
     function computeInfinityProgressPercent(bn){
@@ -348,6 +359,7 @@
       if (bn.m === 0) return 0;
       const diff = bn.e - INF_TARGET.e;
       if (diff > 0) return 100;
+      // compute ratio robustly using mantissa
       const ratio = (bn.m / INF_TARGET.m) * Math.pow(10, diff);
       if (!isFinite(ratio) || ratio <= 0) return 0;
       return Math.min(100, ratio * 100);
@@ -365,9 +377,10 @@
       return total;
     }
 
-    function buyUpgrade(idx, qty){
+    function buyUpgrade(idx, qty, silent){
+      // silent = true when auto-buy, avoid alerts
       const u = upgrades[idx];
-      if (u.level >= getLevelCap(u)){ alert('このアップグレードは上限に達しています'); return; }
+      if (u.level >= getLevelCap(u)){ if (!silent) alert('このアップグレードは最大Lvです（' + getLevelCap(u) + '）'); return; }
       if (qty === 'max'){
         const remaining = getLevelCap(u) - u.level;
         let lo = 0, hi = 1;
@@ -379,15 +392,15 @@
           else hi = mid;
         }
         if (lo > 0) doPurchase(u, idx, lo);
-        else alert('お金が足りません');
+        else if (!silent) alert('お金が足りません');
         return;
       }
       const n = Number(qty) || 1;
       const allowed = Math.min(n, getLevelCap(u) - u.level);
-      if (allowed <= 0){ alert('これ以上購入できません（Lv上限）'); return; }
+      if (allowed <= 0){ if (!silent) alert('これ以上購入できません（Lv上限）'); return; }
       const costBN = costToBuyBig(u, allowed);
       if (money.gteBig(costBN)) doPurchase(u, idx, allowed);
-      else alert('お金が足りません');
+      else if (!silent) alert('お金が足りません');
     }
 
     function doPurchase(u, idx, n){
@@ -403,73 +416,77 @@
     }
 
     function getMultiplierIncrementBig(u){
-      // ascend bonuses increase multiplier increment
       const base = 0.005 * Math.pow(1 + u.level, 0.38);
-      // apply ascend bonus (each ascend gives a small additive increase to base produced earlier)
-      const ascendBonus = (u.ascendCount || 0) * 0.02; // each ascend adds +0.02
-      const extraFromPrestige = (prestigeBonuses.ascendBonusAdd || 0);
-      return BigNum.fromNumber(Math.min(base + ascendBonus + extraFromPrestige, 1e12));
+      return BigNum.fromNumber(Math.min(base, 1e12));
     }
 
     function tryAscend(i){
       const u = upgrades[i];
-      if (u.level < getLevelCap(u)){ alert('Lv上限に達していません（Lvが上限に達してから昇天可能）'); return; }
-      if (!confirm(u.name + ' を昇天しますか？ Lvがリセットされ、永続ボーナスと購入ペナルティが付与されます。')) return;
-      // Ascend grants an ascendCount, increases level cap (handled by getLevelCap)
+      if (u.level < getLevelCap(u)){ alert('Lv上限に到達してから昇天可能です（現在 Lv ' + u.level + ' / ' + getLevelCap(u) + '）'); return; }
+      if (!confirm(u.name + ' を昇天しますか？ Lvがリセットされ、永続ボーナスが付与されます。')) return;
       u.ascendCount = (u.ascendCount || 0) + 1;
-      // add a per-upgrade persistent purchase penalty (永続): +10% per昇天
-      u.purchasePenalty = (u.purchasePenalty || 0) + 0.10;
-      // reset level/progress but keep ascendCount/purchasePenalty
+      // stronger permanent purchase penalty per ascend
+      u.purchasePenalty = (u.purchasePenalty || 0) + 0.25; // +25% per ascend
       u.level = 0;
       u.progress = 0;
       u._rateBN = BigNum.fromNumber(u.baseRate || 1);
       u._multBN = BigNum.zero();
       saveGame();
       updateUI_throttled(true);
-      alert(u.name + ' を昇天しました（昇天回数: ' + u.ascendCount + '）。購入ペナルティ+' + (0.10*100).toFixed(0) + '%が永続で付きます。');
+      alert(u.name + ' を昇天しました（昇天回数: ' + u.ascendCount + '）\n該当アップグレードのコストが永続で +25% されました。');
     }
 
-    // PRESTIGE: resets ascends and permanent purchase penalties, grants prestige points used in shop
+    // PRESTIGE logic (doPrestige): award prestigePoints based on how far above 1e20
+    function prestigePointsForScore(bn){
+      if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
+      if (bn.m === 0) return 0;
+      // compute log10(bn) - 20, floor +1
+      const mantLog = Math.log10(Math.abs(bn.m));
+      const log10val = bn.e + mantLog;
+      const diff = log10val - 20;
+      if (!isFinite(diff) || diff < 0) return 0;
+      const points = Math.floor(diff) + 1; // 1e20 => points=1, 1e21.. => >=2
+      return points;
+    }
+
     function doPrestige(force){
+      // canPrestige: first time require >=1e20; subsequent require strictly > lastPrestigeScore
       let can = false;
-      if (money.gteNumber(1e20)) {
+      if (money.gteNumber(1e20)){
         if (prestigeCount === 0) can = true;
-        else { if (money.gteBig(lastPrestigeScore)) can = true; }
+        else if (isMoneyGreaterThan(money, lastPrestigeScore)) can = true;
       }
       if (!force && !can){ alert('プレステージ条件を満たしていません'); return; }
-      if (!force && !confirm('プレステージを実行しますか？（全てリセット、プレステージポイント付与）')) return;
+      if (!force && !confirm('プレステージを実行しますか？（全てリセット、プレステージポイント付与。プレステージは前回より高いスコアでのみ再度可能）')) return;
 
-      const scoreNum = money.toNumberSafe ? money.toNumberSafe() : Infinity;
-      let gained = 1;
-      if (isFinite(scoreNum) && scoreNum >= 1e20) gained = 1 + Math.floor(Math.log10(scoreNum / 1e20));
-      prestigePoints += gained;
+      const pts = prestigePointsForScore(money);
+      if (pts <= 0 && !force){ alert('スコアが不十分でプレステージポイントは得られません'); return; }
+
+      prestigePoints += pts;
       prestigeCount += 1;
-      prestigeMult.mulByNumber(1 + Math.log10(Math.max(1, scoreNum))); // small prestige mult
       lastPrestigeScore = money.clone();
 
-      // Reset runtime economy but KEEP prestigePoints and prestigeBonuses
+      // reset runtime state (but keep globalPrestige purchases)
       money = BigNum.zero();
-      upgrades.forEach(u => { u.level = 0; u.progress = 0; u._rateBN = BigNum.fromNumber(u.baseRate || 1); u._multBN = BigNum.zero();
-        // reset ascends and permanent purchase penalties as requested
-        u.ascendCount = 0;
-        u.purchasePenalty = 0;
-      });
-
-      // reset other runtime flags
-      speedMultiplier = 1.0;
-      paused = false;
+      baseIncome = BigNum.fromNumber(1);
+      // reset upgrades: clear levels, progress, ascend counts and purchase penalties
+      upgrades = cloneTemplate();
+      sanitizeUpgrades(upgrades);
+      // reset cost growth var? user wanted cost penalty reset on prestige: reset per-upgrade penalties
+      // keep globalPrestige (shop purchases) intact
+      // reset prestige-related runtime but keep prestigePoints and globalPrestige
 
       saveGame();
       initUI();
       updateUI_throttled(true);
-      alert('プレステージ完了: prestigePoints +' + gained + '。全昇天と永続購入ペナルティをリセットしました。');
+      alert('プレステージ完了: prestigePoints +' + pts + '\n現在のプレステージポイント: ' + prestigePoints);
     }
 
     function gainInfinity(){
       if (!money.gteBig(INF_TARGET)){ alert('まだ無限に到達していません'); return; }
       if (!confirm('無限を取得しますか？（全てリセットされ、無限ポイント +1）')) return;
       infinityPoints += 1;
-      // runtime full reset
+      // full reset
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -478,6 +495,8 @@
       prestigeCount = 0;
       prestigeMult = BigNum.fromNumber(1);
       lastPrestigeScore = BigNum.zero();
+      costBaseMultVar = 1.15;
+      globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
       speedMultiplier = 1.0;
       paused = false;
       displayMoneyNum = 0;
@@ -489,55 +508,29 @@
       alert('無限を得ました！ 無限ポイント +1');
     }
 
-    // Reset button handler: full reset in-memory + save removed
-    document.addEventListener('DOMContentLoaded', ()=> {
-      const resetBtn = document.getElementById('resetBtn');
-      resetBtn.addEventListener('click', ()=> {
-        if (!confirm('本当にセーブを削除してゲームを完全に初期化しますか？（元に戻せません）')) return;
-        try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
-        // runtime reset
-        money = BigNum.zero();
-        baseIncome = BigNum.fromNumber(1);
-        upgrades = cloneTemplate();
-        sanitizeUpgrades(upgrades);
-        prestigePoints = 0;
-        prestigeCount = 0;
-        prestigeMult = BigNum.fromNumber(1);
-        lastPrestigeScore = BigNum.zero();
-        infinityPoints = 0;
-        costBaseMultVar = 1.15;
-        prestigeBonuses = { baseIncomeMult:1, upgradeRateMult:1 };
-        speedMultiplier = 1.0;
-        paused = false;
-        displayMoneyNum = 0;
-        prevProgress = new Array(upgrades.length).fill(0);
-        currProgress = new Array(upgrades.length).fill(0);
-        initUI();
-        saveGame();
-        updateUI_throttled(true);
-        alert('ゲームを完全リセットしました。セーブも削除されています。');
-      });
-    });
-
-    // auto-buy
-    setInterval(function(){
-      try {
-        const autoOn = document.getElementById('autoToggle').checked && prestigeCount >= 1;
-        if (!autoOn) return;
-        const qty = document.getElementById('autoQty').value;
-        const order = upgrades.map((u,i)=>({i,c:getUpgradeCostBig(u)})).sort((a,b)=>{
-          if (a.c.e !== b.c.e) return a.c.e - b.c.e;
-          return Math.abs(a.c.m) - Math.abs(b.c.m);
-        });
-        for (let k=0;k<order.length;k++){
-          const entry = order[k];
-          if (money.gteBig(entry.c)){
-            buyUpgrade(entry.i, qty);
-            break;
-          }
-        }
-      } catch(e){ console.warn('auto-buy error', e); }
-    }, 900);
+    // RESET (full): clear storage + runtime
+    function fullReset(){
+      try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
+      money = BigNum.zero();
+      baseIncome = BigNum.fromNumber(1);
+      upgrades = cloneTemplate();
+      sanitizeUpgrades(upgrades);
+      prestigePoints = 0;
+      prestigeCount = 0;
+      prestigeMult = BigNum.fromNumber(1);
+      lastPrestigeScore = BigNum.zero();
+      infinityPoints = 0;
+      costBaseMultVar = 1.15;
+      globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
+      speedMultiplier = 1.0;
+      paused = false;
+      displayMoneyNum = 0;
+      prevProgress = new Array(upgrades.length).fill(0);
+      currProgress = new Array(upgrades.length).fill(0);
+      initUI();
+      saveGame();
+      updateUI_throttled(true);
+    }
 
     // save/load
     function saveGame(){
@@ -555,10 +548,10 @@
           prestigeMult: prestigeMult.toObject(),
           lastPrestigeScore: lastPrestigeScore.toObject(),
           infinityPoints,
-          speedMultiplier,
-          paused,
+          globalPrestige,
           costBaseMultVar,
-          prestigeBonuses
+          speedMultiplier,
+          paused
         };
         localStorage.setItem('idle_all_big_save', JSON.stringify(save));
       } catch(e){ console.warn('save fail', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
@@ -586,7 +579,7 @@
             merged.progress = Number.isFinite(+merged.progress) ? +merged.progress : 0;
             merged.prestigeLevel = merged.prestigeLevel || {mult:0,rate:0,cost:0};
             merged.ascendCount = Number.isFinite(+merged.ascendCount) ? +merged.ascendCount : 0;
-            merged.purchasePenalty = typeof merged.purchasePenalty === 'number' ? merged.purchasePenalty : 0;
+            merged.purchasePenalty = Number.isFinite(+merged.purchasePenalty) ? +merged.purchasePenalty : 0;
             return merged;
           });
         }
@@ -597,13 +590,11 @@
         if (data.lastPrestigeScore && typeof data.lastPrestigeScore.m === 'number') lastPrestigeScore = BigNum.fromObject(data.lastPrestigeScore);
 
         if (typeof data.infinityPoints === 'number') infinityPoints = data.infinityPoints;
+        if (data.globalPrestige && typeof data.globalPrestige === 'object') Object.assign(globalPrestige, data.globalPrestige);
+        if (typeof data.costBaseMultVar === 'number') costBaseMultVar = data.costBaseMultVar;
         if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, Math.round(data.speedMultiplier)));
         if (typeof data.paused === 'boolean') paused = !!data.paused;
 
-        if (typeof data.costBaseMultVar === 'number') costBaseMultVar = data.costBaseMultVar;
-        if (data.prestigeBonuses && typeof data.prestigeBonuses === 'object') prestigeBonuses = data.prestigeBonuses;
-
-        // ensure BN fields exist
         sanitizeUpgrades(upgrades);
       } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
@@ -626,9 +617,9 @@
         prevProgress[i] = currProgress[i];
         let progRate = NaN;
         try { progRate = (u._rateBN && typeof u._rateBN.toNumberSafe === 'function') ? u._rateBN.toNumberSafe() : NaN; } catch(e){ progRate = NaN; }
+        // apply global r multiplier here for progression speed
         if (!isFinite(progRate) || progRate <= 0) progRate = (u.baseRate || 0.01);
-        // apply prestige upgrade rate multiplier
-        progRate *= prestigeBonuses.upgradeRateMult || 1;
+        progRate *= (globalPrestige.rMul || 1);
         let incProg = progRate * dt * 100 * s;
         if (!isFinite(incProg)) incProg = 0;
         currProgress[i] += incProg;
@@ -652,7 +643,7 @@
         const asc = 0.05 * (u.ascendCount || 0);
         const factorBN = BigNum.fromNumber(1);
         factorBN.addInPlace(u._multBN);
-        factorBN.addNumber(pMult + asc);
+        factorBN.addNumber(pMult + asc + (globalPrestige.mAdd || 0));
         totalMultBN.mulInPlace(factorBN);
       }
 
@@ -716,48 +707,43 @@
     requestAnimationFrame(render);
 
     // wiring
+    // ensure doPrestige exists before wiring the button
     const prestigeBtn = document.getElementById('prestigeBtn');
     prestigeBtn.addEventListener('click', ()=> doPrestige(false));
-    document.getElementById('gainInfinityBtn').addEventListener('click', gainInfinity);
+
+    const inftyBtn = document.getElementById('gainInfinityBtn');
+    if (inftyBtn) inftyBtn.addEventListener('click', gainInfinity);
     window.addEventListener('beforeunload', ()=> saveGame());
 
-    // prestige shop wiring
-    document.getElementById('prestigeShop').addEventListener('click', (e)=>{
-      const btn = e.target.closest('button[data-item]');
-      if (!btn) return;
-      const item = btn.getAttribute('data-item');
-      buyPrestigeItem(item);
+    // attach reset handler -> FULL reset in-memory + save removed
+    const resetBtn = document.getElementById('resetBtn');
+    resetBtn.addEventListener('click', ()=> {
+      if (!confirm('本当にセーブを削除してゲームを完全に初期化しますか？（元に戻せません）')) return;
+      fullReset();
+      alert('ゲームを完全リセットしました。セーブも削除されています。');
     });
 
-    function buyPrestigeItem(item){
-      switch(item){
-        case 'baseInc':{
-          const cost = 3;
-          if (prestigePoints < cost) { alert('プレステージポイントが足りません'); return; }
-          prestigePoints -= cost;
-          prestigeBonuses.baseIncomeMult *= 1.10;
-          saveGame(); updateUI_throttled(true);
-          alert('購入完了: baseIncome ×1.10');
-        } break;
-        case 'upRate':{
-          const cost = 5;
-          if (prestigePoints < cost) { alert('プレステージポイントが足りません'); return; }
-          prestigePoints -= cost;
-          prestigeBonuses.upgradeRateMult *= 1.05;
-          saveGame(); updateUI_throttled(true);
-          alert('購入完了: 全アップグレードの速度 ×1.05');
-        } break;
-        case 'reduceCost':{
-          const cost = 8;
-          if (prestigePoints < cost) { alert('プレステージポイントが足りません'); return; }
-          prestigePoints -= cost;
-          costBaseMultVar = Math.max(1.05, costBaseMultVar - 0.01);
-          saveGame(); updateUI_throttled(true);
-          alert('購入完了: コスト成長率を -0.01');
-        } break;
-        default: alert('不明なアイテム');
-      }
-    }
+    // auto-buy
+    setInterval(function(){
+      try {
+        const autoOn = document.getElementById('autoToggle').checked && prestigeCount >= 1;
+        if (!autoOn) return;
+        const qty = document.getElementById('autoQty').value;
+        const order = upgrades.map((u,i)=>({i,c:getUpgradeCostBig(u)})).sort((a,b)=>{
+          if (a.c.e !== b.c.e) return a.c.e - b.c.e;
+          return Math.abs(a.c.m) - Math.abs(b.c.m);
+        });
+        for (let k=0;k<order.length;k++){
+          const entry = order[k];
+          // skip if at level cap
+          if (upgrades[entry.i].level >= getLevelCap(upgrades[entry.i])) continue;
+          if (money.gteBig(entry.c)){
+            buyUpgrade(entry.i, qty, true); // silent auto-buy
+            break;
+          }
+        }
+      } catch(e){ console.warn('auto-buy error', e); }
+    }, 900);
 
     // speed UI
     const speedSelect = document.getElementById('speedSelect');
@@ -784,75 +770,76 @@
 
     updateSpeedUI(true);
 
+    // ===== Prestige shop UI & logic =====
+    const prestigeShopItems = [
+      { id:'m_add', title:'全アップグレード m +0.01', cost:2, apply(){ globalPrestige.mAdd += 0.01; } },
+      { id:'r_mul', title:'全アップグレード r ×1.05', cost:3, apply(){ globalPrestige.rMul *= 1.05; } },
+      { id:'cost_dec', title:'全アップグレード コスト -10%', cost:4, apply(){ globalPrestige.costMul *= 0.90; } },
+      { id:'costGrowth_down', title:'コスト成長率を-0.01', cost:6, apply(){ costBaseMultVar = Math.max(1.01, costBaseMultVar - 0.01); } },
+    ];
 
-    // ===== 高機能デバッグモード (URL "?=" 形式) =====
-(function() {
-  const params = window.location.search;
-  const match = params.match(/\?=(.+)/);
-  if (!match) return;
+    function renderPrestigeShop(){
+      const shop = document.getElementById('prestigeShop');
+      if (!shop) return;
+      shop.innerHTML = '';
+      const info = document.createElement('div'); info.className='card'; info.textContent = 'プレステージポイント: ' + prestigePoints; shop.appendChild(info);
+      prestigeShopItems.forEach(item => {
+        const card = document.createElement('div'); card.className='card';
+        card.innerHTML = `<div><strong>${item.title}</strong></div><div class="small">Cost: ${item.cost} pts</div>`;
+        const btn = document.createElement('button'); btn.className='btn btn-small'; btn.textContent='Buy';
+        btn.addEventListener('click', ()=>{
+          if (prestigePoints >= item.cost){
+            prestigePoints -= item.cost;
+            item.apply();
+            saveGame();
+            updateUI_throttled(true);
+            alert('購入しました: ' + item.title);
+          } else alert('プレステージポイントが足りません');
+        });
+        card.appendChild(btn);
+        shop.appendChild(card);
+      });
+    }
 
-  const command = match[1];
-  console.log("DEBUG MODE:", command);
-
-  // 解析（key:value形式対応）
-  const [key, value] = command.split(":");
-
-  switch (key) {
-    case "prestige":
-      money = BigNum.fromNumber(1e21);
-      updateUI_throttled(true);
-      alert("デバッグ: プレステージ条件を満たしました");
-      break;
-
-    case "infinity":
-      money = BigNum.fromNumber(1.8e308);
-      updateUI_throttled(true);
-      alert("デバッグ: 無限条件を満たしました");
-      break;
-
-    case "ascend":
-      upgrades.forEach(u => { u.level = getLevelCap(u); u.ascendCount = getLevelCap(u)/10 - 10; });
-      updateUI_throttled(true);
-      alert("デバッグ: 全アップグレードをLv上限にしました");
-      break;
-
-    case "money":
-      money = BigNum.fromNumber(value || "1e10");
-      updateUI_throttled(true);
-      alert("デバッグ: 所持金を " + value + " に設定しました");
-      break;
-
-    case "level":{
-      const [idx, lv] = (value || "").split(",");
-      if (upgrades[idx]) {
-        upgrades[idx].level = parseInt(lv) || 1;
-        updateUI_throttled(true);
-        alert(`デバッグ: アップグレード${idx}をLv${lv}に設定しました`);
+    // ===== Debug URL ?= support (keeps from earlier) =====
+    (function() {
+      const params = window.location.search;
+      const match = params.match(/\?=(.+)/);
+      if (!match) return;
+      const command = match[1];
+      console.log("DEBUG MODE:", command);
+      const [key, value] = command.split(":");
+      switch (key) {
+        case "prestige":
+          money = BigNum.fromNumber(1e21);
+          updateUI_throttled(true);
+          alert("デバッグ: プレステージ条件を満たしました");
+          break;
+        case "infinity":
+          money = BigNum.fromMantExp(1.8,308);
+          updateUI_throttled(true);
+          alert("デバッグ: 無限条件を満たしました");
+          break;
+        case "ascend":
+          upgrades.forEach(u => u.level = getLevelCap(u));
+          updateUI_throttled(true);
+          alert("デバッグ: 全アップグレードをLv上限にしました");
+          break;
+        case "money":
+          money = BigNum.fromNumber(Number(value) || 1e10);
+          updateUI_throttled(true);
+          alert("デバッグ: 所持金を " + value + " に設定しました");
+          break;
+        case "reset":
+          if (confirm("本当に全てをリセットしますか？")){
+            fullReset();
+            alert("デバッグ: セーブを完全リセットしました");
+          }
+          break;
+        default:
+          alert("不明なデバッグコマンド: " + command);
       }
-    } break;
-
-    case "boost":
-      prestigeMult = BigNum.fromNumber(value || 2);
-      updateUI_throttled(true);
-      alert("デバッグ: 収入倍率を " + value + " 倍に設定しました");
-      break;
-
-    case "reset":
-      if (confirm("本当に全てをリセットしますか？")) {
-        localStorage.clear();
-        money = BigNum.zero();
-        infinityPoints = 0;
-        upgrades.forEach(u => { u.level = 0; u.purchasePenalty = 0; u.ascendCount = 0; });
-        updateUI_throttled(true);
-        alert("デバッグ: セーブを完全リセットしました");
-      }
-      break;
-
-    default:
-      alert("不明なデバッグコマンド: " + command);
-  }
-})();
-
+    })();
 
   } catch(err){
     showError(err && err.message ? err.message : String(err));
