@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — Prestige + Infinity (Step3+4)</title>
+<title>Idle — Prestige & Infinity (Step3+4) - Fix</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -29,7 +29,7 @@
 <body>
   <div id="error" class="errorBanner"></div>
 
-  <h1>💰 放置ゲーム — Prestige & Infinity (Step3+4)</h1>
+  <h1>💰 放置ゲーム — Prestige & Infinity (Fix)</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
@@ -160,10 +160,9 @@
 
     // --- Infinity / Generators (Step4) ---
     let generatorPoints = 0; // GP
-    // gens [0] = G1, [1] = G2, ... [9] = G10
     let generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
-    const genBaseCost = [1,3,10,30,100,300,1000,3000,10000,30000]; // base IP costs
-    const genCostScale = 1.5; // per purchase scale
+    const genBaseCost = [1,3,10,30,100,300,1000,3000,10000,30000];
+    const genCostScale = 1.5;
 
     let speedMultiplier = 1.0; // 1..3
     let paused = false;
@@ -185,7 +184,6 @@
       return String(n);
     }
 
-    /* BigNum 用の log10 ヘルパー */
     function bigNumLog10(bn){
       if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
       if (bn.m === 0) return -Infinity;
@@ -318,7 +316,6 @@
         ui.costEl.textContent = getUpgradeCostBig(u,0).toString();
         const multNum = u._multBN.toNumberSafe();
         ui.multEl.textContent = '+' + (isFinite(multNum) ? multNum.toFixed(3) : u._multBN.toString());
-        // apply global r multiplier when showing rate
         const rateClone = u._rateBN.clone();
         rateClone.mulByNumber(globalPrestige.rMul || 1);
         const rateNum = rateClone.toNumberSafe();
@@ -376,8 +373,8 @@
       const logStart = bigNumLog10(INF_START);
       const logTarget = bigNumLog10(INF_TARGET);
       if (!isFinite(logVal)) return 0;
-      if (logVal < logStart) return 0;
-      if (logVal >= logTarget) return 100;
+      if (logVal < logStart) return 0;               // INF_START より小さければ 0%
+      if (logVal >= logTarget) return 100;           // INF_TARGET で 100%
       const pct = (logVal - logStart) / (logTarget - logStart) * 100;
       return Math.max(0, Math.min(100, pct));
     }
@@ -394,10 +391,8 @@
       return total;
     }
 
-    /* generator effect multiplies the multiplier increment */
     function getMultiplierIncrementBig(u){
       const base = 0.005 * Math.pow(1 + u.level, 0.38);
-      // generatorPoints multiplies increment: factor = 1 + GP * 0.1
       const genFactor = 1 + (generatorPoints || 0) * 0.1;
       return BigNum.fromNumber(Math.min(base * genFactor, 1e12));
     }
@@ -482,8 +477,6 @@
       prestigeCount += 1;
       lastPrestigeScore = money.clone();
 
-      // reset generation (money/upgrades) but KEEP globalPrestige purchases (user requested earlier to persist?)
-      // The user later asked that prestige purchases are reset on Infinity; here for normal prestige we keep globalPrestige.
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -494,29 +487,25 @@
       alert('プレステージ完了: prestigePoints +' + pts + '\n現在のプレステージポイント: ' + prestigePoints);
     }
 
-    // gain Infinity (IP) - Step4 behavior
+    // gain Infinity (IP)
     function gainInfinity(){
       if (!money.gteBig(INF_TARGET)){ alert('まだ無限に到達していません'); return; }
       if (!confirm('無限を取得しますか？（Generationを全てリセットし、無限ポイント (IP) +1）')) return;
       infinityPoints += 1;
 
-      // Reset Generation: money, baseIncome, upgrades, prestige purchases (globalPrestige), prestigePoints, prestigeCount, etc.
+      // Reset Generation
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
       sanitizeUpgrades(upgrades);
-      // Reset prestige-level things (user requested to reset prestige ups on Infinity)
       prestigePoints = 0;
       prestigeCount = 0;
       prestigeMult = BigNum.fromNumber(1);
       lastPrestigeScore = BigNum.zero();
 
-      // Reset progression / growth variables except IP and INF-specific purchases (generators) should remain
       costBaseMultVar = 1.15;
       globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
 
-      // Note: generators and generatorPoints are NOT reset here (they are purchased with IP).
-      // If you want to also reset generators on Infinity, change here.
       speedMultiplier = 1.0;
       paused = false;
       displayMoneyNum = 0;
@@ -528,7 +517,7 @@
       alert('無限を得ました！ IP +1');
     }
 
-    // RESET (full): clear storage + runtime (including generators & IP)
+    // RESET (full)
     function fullReset(){
       try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
       money = BigNum.zero();
@@ -542,7 +531,6 @@
       infinityPoints = 0;
       costBaseMultVar = 1.15;
       globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
-      // reset generators & GP as well
       generatorPoints = 0;
       generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
       speedMultiplier = 1.0;
@@ -575,7 +563,6 @@
           costBaseMultVar,
           speedMultiplier,
           paused,
-          // generators
           generatorPoints,
           generators
         };
@@ -621,7 +608,6 @@
         if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, Math.round(data.speedMultiplier)));
         if (typeof data.paused === 'boolean') paused = !!data.paused;
 
-        // load generators
         if (typeof data.generatorPoints === 'number') generatorPoints = data.generatorPoints;
         if (Array.isArray(data.generators) && data.generators.length === 10){
           generators = data.generators.map(g => ({
@@ -646,18 +632,15 @@
     let lastTime = performance.now();
 
     function simulateGenerators(dt){
-      // G1: produces GP directly. base: 0.01 GP per 10s per G1 => 0.001 GP/s per G1
       const g1count = generators[0].count || 0;
       const g1PerSecPer = 0.001;
       const gpGain = g1count * g1PerSecPer * dt;
       if (gpGain > 0) generatorPoints += gpGain;
 
-      // G2..G10 produce lower-tier counts: each produces +1 lower per 10s per generator => 0.1 per sec * count
       for (let tier = 1; tier < 10; tier++){
         const g = generators[tier];
         if (!g || g.count <= 0) continue;
-        // progress represents fractional increments to lower-tier count
-        const perSec = 0.1 * g.count; // 1 per 10s per generator
+        const perSec = 0.1 * g.count;
         g.progress += perSec * dt;
         if (g.progress >= 1){
           const inc = Math.floor(g.progress);
@@ -669,7 +652,6 @@
 
     function simulateStep(dt){
       const s = speedMultiplier;
-      // upgrades progression
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
         prevProgress[i] = currProgress[i];
@@ -693,7 +675,6 @@
         u.progress = currProgress[i];
       }
 
-      // compute income
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -709,9 +690,12 @@
       addBN.mulInPlace(totalMultBN);
       addBN.mulByNumber(dt * s);
       money.addInPlace(addBN);
-      if (money.e > 1000) money = BigNum.fromNumber(1e300);
 
-      // simulate generators
+      // clamp money to INF_TARGET if it reaches or exceeds it to avoid overflow and accidental resets
+      if (money.gteBig(INF_TARGET)) {
+        money = INF_TARGET.clone();
+      }
+
       simulateGenerators(dt);
     }
 
@@ -830,7 +814,6 @@
 
     // ===== Prestige + Infinity shop UI & logic =====
     function genCostForPurchase(tier, qty){
-      // compute sum cost in IP for qty purchases for current count
       const base = genBaseCost[tier];
       let total = 0;
       let cur = generators[tier].count || 0;
@@ -857,7 +840,6 @@
       if (!shop) return;
       shop.innerHTML = '';
 
-      // Prestige info + items
       const info = document.createElement('div'); info.className='card';
       info.innerHTML = `<div><strong>プレステージポイント: ${prestigePoints}</strong></div><div class="small">プレステージ回数: ${prestigeCount}</div>`;
       shop.appendChild(info);
@@ -886,12 +868,10 @@
         shop.appendChild(card);
       });
 
-      // Infinity (IP) & Generator shop
       const ipCard = document.createElement('div'); ipCard.className='card';
       ipCard.innerHTML = `<div><strong>無限ポイント(IP): ${infinityPoints}</strong></div><div class="small">GP: ${generatorPoints.toFixed(4)}</div>`;
       shop.appendChild(ipCard);
 
-      // Generators section
       const genContainer = document.createElement('div'); genContainer.className='card col';
       genContainer.innerHTML = `<div><strong>Generators (G1〜G10) — IPで購入</strong></div><div class="small">G1はGPを生成。G2..G10は下位ジェネレーターを増やします。</div>`;
       for (let t=0;t<10;t++){
@@ -911,7 +891,7 @@
       shop.appendChild(genContainer);
     }
 
-    // ===== Debug URL ?= support =====
+    // Debug support
     (function() {
       const params = window.location.search;
       const match = params.match(/\?=(.+)/);
