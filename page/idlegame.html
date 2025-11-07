@@ -771,14 +771,16 @@
     updateSpeedUI(true);
 
     // ===== Prestige shop UI & logic =====
-    const prestigeShopItems = [
+    
+    function renderPrestigeShop(){
+      
+      const prestigeShopItems = [
       { id:'m_add', title:'全アップグレード m +0.01', cost:2, apply(){ globalPrestige.mAdd += 0.01; } },
       { id:'r_mul', title:'全アップグレード r ×1.05', cost:3, apply(){ globalPrestige.rMul *= 1.05; } },
       { id:'cost_dec', title:'全アップグレード コスト -10%', cost:4, apply(){ globalPrestige.costMul *= 0.90; } },
       { id:'costGrowth_down', title:'コスト成長率を-0.01', cost:6, apply(){ costBaseMultVar = Math.max(1.01, costBaseMultVar - 0.01); } },
-    ];
-
-    function renderPrestigeShop(){
+    　];
+      
       const shop = document.getElementById('prestigeShop');
       if (!shop) return;
       shop.innerHTML = '';
