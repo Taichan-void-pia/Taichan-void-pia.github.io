@@ -240,6 +240,25 @@
       return c;
     }
 
+    const skillNodes = (function(){
+      const nodes = [];
+      // generate 50 nodes with increasing costs and rotating effects
+      for (let i=0;i<50;i++){
+        const cost = Math.ceil(5 * Math.pow(1.35, i));
+        const type = i % 5; // 0:mAdd,1:rMul,2:costMul,3:genSpeed,4:prestigeGain
+        const title = ['全アップグレード m +0.01','全アップグレード r ×1.03','全アップグレード コスト -2%','ジェネレータ速度 +2%','プレステージ報酬 +5%'][type];
+        const effect = function(node){
+          if (type === 0) globalPrestige.mAdd += 0.01;
+          if (type === 1) globalPrestige.rMul *= 1.03;
+          if (type === 2) globalPrestige.costMul *= 0.98;
+          if (type === 3) generatorSpeedMult *= 1.02;
+          if (type === 4) globalPrestige.prestigeGainMult *= 1.05;
+        };
+        nodes.push({id:i, title: title + ' (Lv+' + (i+1) + ')', cost, purchased:false, apply:effect});
+      }
+      return nodes;
+    })();
+
     // UI init
     function initUI(){
       const container = document.getElementById('upgradeContainer');
@@ -949,25 +968,7 @@
       shop.appendChild(genContainer);
     }
 
-    // ------------------ Skill Tree (50 nodes) ------------------
-    const skillNodes = (function(){
-      const nodes = [];
-      // generate 50 nodes with increasing costs and rotating effects
-      for (let i=0;i<50;i++){
-        const cost = Math.ceil(5 * Math.pow(1.35, i));
-        const type = i % 5; // 0:mAdd,1:rMul,2:costMul,3:genSpeed,4:prestigeGain
-        const title = ['全アップグレード m +0.01','全アップグレード r ×1.03','全アップグレード コスト -2%','ジェネレータ速度 +2%','プレステージ報酬 +5%'][type];
-        const effect = function(node){
-          if (type === 0) globalPrestige.mAdd += 0.01;
-          if (type === 1) globalPrestige.rMul *= 1.03;
-          if (type === 2) globalPrestige.costMul *= 0.98;
-          if (type === 3) generatorSpeedMult *= 1.02;
-          if (type === 4) globalPrestige.prestigeGainMult *= 1.05;
-        };
-        nodes.push({id:i, title: title + ' (Lv+' + (i+1) + ')', cost, purchased:false, apply:effect});
-      }
-      return nodes;
-    })();
+    // ------------------ Skill Tree (50 nodes) -----------------
 
     function renderSkillTree(){
       const wrap = document.getElementById('skillTreeCanvas');
