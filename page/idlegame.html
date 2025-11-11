@@ -1,8 +1,7 @@
-<!DOCTYPE html>
-<html lang="ja">
+<!DOCTYPE html><html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — Prestige + Infinity (Step3-5) - Skill Tree + BigNum Fix</title>
+<title>Idle — Prestige & Infinity (Step1-3)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -25,20 +24,18 @@
   .shop .card{background:rgba(255,255,255,0.03);padding:8px;border-radius:6px}
   .col{display:flex;flex-direction:column;gap:6px}
   /* skill tree */
-  #skillTreeWrap{margin-top:12px;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px}
-  #skillTreeCanvas{width:100%;height:420px;background:transparent;position:relative}
-  .skillNode{position:absolute;width:80px;height:40px;border-radius:8px;background:rgba(255,255,255,0.03);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:2px solid rgba(255,255,255,0.04)}
-  .skillNode.purchased{background:linear-gradient(90deg,#ffd37a,#ffd98a);color:#111;border-color:#ffd37a}
-  .skillNode.locked{opacity:0.5}
-  svg.connector{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+  #skillTreeWrap{width:100%;display:flex;gap:8px}
+  #skillSvg{background:rgba(255,255,255,0.01);border-radius:8px;padding:8px;flex:1;min-height:360px}
+  #skillList{width:360px;background:rgba(255,255,255,0.02);padding:8px;border-radius:8px}
+  .node{cursor:pointer}
+  .node.locked circle{fill:#2b3940;stroke:#444}
+  .node.unlocked circle{fill:#7bf3a8;stroke:#0b3e2b}
+  .node.bought circle{fill:#39d092;stroke:#052d1f}
+  .node text{font-size:10px;fill:#001}
 </style>
 </head>
 <body>
-  <div id="error" class="errorBanner"></div>
-
-  <h1>💰 放置ゲーム — Prestige & Infinity (Step3-5)</h1>
-
-  <div class="stats">
+  <div id="error" class="errorBanner"></div>  <h1>💰 放置ゲーム — Prestige & Infinity (Step1-3)</h1>  <div class="stats">
     所持金：<span id="money">0</span>　
     秒あたり：<span id="rate">0</span>
     <div class="small" id="formula">(計算式)</div>
@@ -51,9 +48,7 @@
       <button id="gainInfinityBtn" class="btn btn-primary invisible" style="margin-left:10px">無限を得る</button>
       <span class="small" style="margin-left:8px">無限ポイント(IP): <span id="inftyPoints">0</span></span>
     </div>
-  </div>
-
-  <div class="panel">
+  </div>  <div class="panel">
     <div style="display:flex;gap:8px;align-items:center">
       <button id="prestigeBtn" class="btn btn-primary invisible">✨ プレステージ</button>
       <button id="resetBtn" class="btn btn-small">リセット（完全）</button>
@@ -63,36 +58,21 @@
         </select>
         <input id="autoToggle" type="checkbox" style="margin-left:6px" />（プレステージ1回後に有効）
       </label>
-    </div>
+    </div><div class="speedControls small" style="margin-left:auto">
+  倍速：
+  <select id="speedSelect">
+    <option value="1">1×</option>
+    <option value="2">2×</option>
+    <option value="3">3×</option>
+  </select>
+  <button id="speedDec" class="btn btn-small">-</button>
+  <button id="speedInc" class="btn btn-small">+</button>
+  <button id="pauseBtn" class="btn btn-small">一時停止</button>
+</div>
 
-    <div class="speedControls small" style="margin-left:auto">
-      倍速：
-      <select id="speedSelect">
-        <option value="1">1×</option>
-        <option value="2">2×</option>
-        <option value="3">3×</option>
-      </select>
-      <button id="speedDec" class="btn btn-small">-</button>
-      <button id="speedInc" class="btn btn-small">+</button>
-      <button id="pauseBtn" class="btn btn-small">一時停止</button>
-    </div>
+<div class="small" style="width:100%;margin-top:6px">プレステージ初回条件: 1e20（2回目以降は前回プレステージ時のスコアより上） — 昇天はLv上限到達で表示・実行可能</div>
 
-    <div class="small" style="width:100%;margin-top:6px">プレステージ初回条件: 1e20（2回目以降は前回プレステージ時のスコアより上） — 昇天はLv上限到達で表示・実行可能</div>
-  </div>
-
-  <div id="upgradeContainer"></div>
-
-  <div id="prestigeShop" class="shop"></div>
-
-  <div id="skillTreeWrap">
-    <h3 style="margin:6px 0 8px 0">Infinity アップグレード（スキルツリー）</h3>
-    <div id="skillTreeCanvas">
-      <svg id="skillSVG" class="connector"></svg>
-      <!-- nodes will be injected here -->
-    </div>
-  </div>
-
-<script>
+  </div>  <div id="upgradeContainer"></div>  <div id="prestigeShop" class="shop"></div><script>
 (function(){
   function showError(msg){
     const el = document.getElementById('error');
@@ -138,7 +118,7 @@
 
     // --------------- constants & templates ---------------
     const INF_TARGET = BigNum.fromMantExp(1.8, 308); // 1.8e308
-    const INF_START  = BigNum.fromMantExp(1.0, 307); // 1e307 -> メーター開始
+    const INF_START  = BigNum.fromMantExp(1.0, 307); // 1e307 -> メーターが増え始める閾値
     const PROGRESS_CAP = 1e9;
     let costBaseMultVar = 1.15;
 
@@ -171,16 +151,83 @@
       mAdd: 0,   // additive to upgrade _mult (as number)
       rMul: 1.0, // multiplicative to upgrade rate
       costMul: 1.0, // multiplicative to cost (less than 1 reduces cost)
-      prestigeGainMult: 1.0 // multiplies prestige point reward
     };
 
     // --- Infinity / Generators (Step4) ---
-    let generatorPoints = BigNum.zero(); // GP as BigNum now
+    let generatorPoints = 0; // GP
     let generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
     const genBaseCost = [1,3,10,30,100,300,1000,3000,10000,30000];
     const genCostScale = 1.5;
-    let generatorSpeedMult = 1.0;
 
+    // --- Skill nodes (Infinity upgrades / skill tree) - Step1-3 include generation + persistence ---
+    let skillNodes = [];
+    function buildSkillNodes(){
+      if (skillNodes && skillNodes.length) return; // already built
+      const names = [
+        "永続の種", "量子熟成", "収益加速I", "収益加速II", "コスト最適化I",
+        "ジェネレータ強化I", "ジェネレータ強化II", "基礎収入+", "プレステージ効率I", "プレステージ効率II",
+        "永続的資産", "収入乗算I", "収入乗算II", "鉱山効率I", "鉱山効率II",
+        "時間の融解", "効率的アルゴリズム", "量子投資", "AI収益化", "マーケティング大作戦",
+        "研究高速化", "惑星資源", "サーバー分散化", "次元圧縮", "オーバークロック",
+        "永遠の礎I", "永遠の礎II", "GPブーストI", "GPブーストII", "コスト成長低下",
+        "倍率安定化", "スーパー合金", "自動化改良", "エネルギー回収", "補助コア",
+        "次元伝送", "量子圧縮", "永久素材", "時間加速", "最適化フォーミュラ",
+        "収益バースト", "節税戦略", "研究所深化", "市場独占", "プレステージボーナス",
+        "無限触媒I", "無限触媒II", "永遠の導き", "絶対効率"
+      ];
+
+      // layout: 10 columns x 5 rows
+      const cols = 10; const rows = 5; let idx = 0;
+      for (let r=0;r<rows;r++){
+        for (let c=0;c<cols;c++){
+          if (idx >= 50) break;
+          const cost = 1 + Math.floor(idx/5); // increasing cost pattern
+          // assign types & values for diversity
+          const typeCycle = idx % 8;
+          let effect = {type:'mAdd', value:0.01};
+          switch(typeCycle){
+            case 0: effect = {type:'mAdd', value:0.01 + idx*0.001}; break; // additive to m
+            case 1: effect = {type:'rMul', value:1 + 0.02 + idx*0.002}; break; // r multiplier
+            case 2: effect = {type:'costMul', value:0.98 - (idx%5)*0.002}; break; // reduce cost
+            case 3: effect = {type:'genBoost', value:0.05 + (idx%4)*0.02}; break; // generator multiplier to GP gain
+            case 4: effect = {type:'baseIncome', value:1 + 0.05 + (idx%6)*0.01}; break; // multiply baseIncome
+            case 5: effect = {type:'gpGain', value:0.5 + (idx%3)*0.25}; break; // one-time GP when unlocking
+            case 6: effect = {type:'prestigeBonus', value:1 + (idx%4)*0.1}; break; // increases prestige point value multiplicatively
+            case 7: effect = {type:'misc', value:0.01 + (idx%5)*0.005}; break;
+          }
+          skillNodes.push({
+            id: idx,
+            name: names[idx] || ('Node ' + (idx+1)),
+            cost: cost,
+            x: 60 + c * 100,
+            y: 40 + r * 70,
+            parents: (r === 0) ? [] : [idx - cols], // simple parent chain: connect to node above
+            unlocked: false,
+            applied: false,
+            effect
+          });
+          idx++;
+        }
+      }
+    }
+
+    function applySkillEffect(node){
+      if (!node || node.applied) return;
+      const eff = node.effect;
+      switch(eff.type){
+        case 'mAdd': globalPrestige.mAdd += eff.value; break;
+        case 'rMul': globalPrestige.rMul *= eff.value; break;
+        case 'costMul': globalPrestige.costMul *= eff.value; break;
+        case 'genBoost': generatorPoints *= (1 + eff.value); break; // multiply existing GP
+        case 'baseIncome': baseIncome.mulByNumber(eff.value); break;
+        case 'gpGain': generatorPoints += eff.value; break;
+        case 'prestigeBonus': prestigeMult.mulByNumber(eff.value); break;
+        case 'misc': globalPrestige.mAdd += eff.value; break;
+      }
+      node.applied = true;
+    }
+
+    // --------------- rest of state ---------------
     let speedMultiplier = 1.0; // 1..3
     let paused = false;
 
@@ -240,27 +287,9 @@
       return c;
     }
 
-    const skillNodes = (function(){
-      const nodes = [];
-      // generate 50 nodes with increasing costs and rotating effects
-      for (let i=0;i<50;i++){
-        const cost = Math.ceil(5 * Math.pow(1.35, i));
-        const type = i % 5; // 0:mAdd,1:rMul,2:costMul,3:genSpeed,4:prestigeGain
-        const title = ['全アップグレード m +0.01','全アップグレード r ×1.03','全アップグレード コスト -2%','ジェネレータ速度 +2%','プレステージ報酬 +5%'][type];
-        const effect = function(node){
-          if (type === 0) globalPrestige.mAdd += 0.01;
-          if (type === 1) globalPrestige.rMul *= 1.03;
-          if (type === 2) globalPrestige.costMul *= 0.98;
-          if (type === 3) generatorSpeedMult *= 1.02;
-          if (type === 4) globalPrestige.prestigeGainMult *= 1.05;
-        };
-        nodes.push({id:i, title: title + ' (Lv+' + (i+1) + ')', cost, purchased:false, apply:effect});
-      }
-      return nodes;
-    })();
-
     // UI init
     function initUI(){
+      buildSkillNodes(); // ensure skill nodes defined before any render/use
       const container = document.getElementById('upgradeContainer');
       container.innerHTML = '';
       upgrades.forEach((u,i)=>{
@@ -312,17 +341,23 @@
       for (let i=0;i<upgrades.length;i++){ prevProgress[i] = upgrades[i].progress || 0; currProgress[i] = upgrades[i].progress || 0; }
 
       renderPrestigeShop();
-      renderSkillTree();
     }
 
     // throttled UI update
     let lastUI = 0;
+    function bnToDisplay(bn){
+      if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
+      // if exponent small show number
+      if (bn.e <= 12) return bn.toNumberSafe();
+      return bn.toString();
+    }
+
     function updateUI_throttled(force){
       const now = performance.now();
       if (!force && now - lastUI < 100) return;
       lastUI = now;
 
-      // compute total multiplier using BigNum (robust)
+      // compute total multiplier as BigNum
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -334,32 +369,24 @@
         totalMultBN.mulInPlace(factorBN);
       }
 
-      // apply prestige multiplier (prestigeMult BigNum)
       const rateBN = baseIncome.clone();
       rateBN.mulInPlace(totalMultBN);
-      rateBN.mulInPlace(prestigeMult);
+      // display rate: if very large, use BigNum string
+      const rateEl = document.getElementById('rate');
+      if (rateBN.e > 15) rateEl.textContent = rateBN.toString();
+      else rateEl.textContent = (rateBN.toNumberSafe() || 0).toFixed(2);
 
-      // display: use BigNum string when too large
-      const rateDisplayNum = rateBN.toNumberSafe();
-      if (isFinite(rateDisplayNum) && Math.abs(rateDisplayNum) <= 1e16){
-        document.getElementById('rate').textContent = rateDisplayNum.toFixed(2);
-      } else {
-        document.getElementById('rate').textContent = rateBN.toString();
-      }
-
-      // formula: show BigNum if necessary
+      // formula parts: show BigNum strings if needed
       let formulaParts = upgrades.map(u=>{
-        const n = (u._multBN && u._multBN.toNumberSafe && isFinite(u._multBN.toNumberSafe())) ? u._multBN.toNumberSafe() : null;
-        const add = 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0) + (globalPrestige.mAdd || 0);
-        if (n !== null){
-          const part = 1 + n + add;
-          return '(1+' + part.toFixed(3) + ')';
-        } else {
-          // large: use BigNum string
-          return '(1+' + u._multBN.toString() + '...)';
-        }
+        const uMultBN = u._multBN.clone();
+        // part = 1 + uMult + pMult + asc + global
+        let partBN = BigNum.fromNumber(1);
+        partBN.addInPlace(uMultBN);
+        partBN.addNumber(0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0) + (globalPrestige.mAdd || 0));
+        if (partBN.e > 12) return '(1+' + partBN.toString() + ')';
+        const num = partBN.toNumberSafe();
+        return '(1+' + num.toFixed(3) + ')';
       });
-
       document.getElementById('formula').textContent = '収入 = baseIncome × ' + formulaParts.join(' × ') + '  （倍速: ' + speedMultiplier.toFixed(0) + (paused ? ' 停止中' : '') + '）';
 
       for (let i=0;i<upgrades.length;i++){
@@ -368,12 +395,11 @@
         ui.lvlEl.textContent = u.level;
         ui.capEl.textContent = getLevelCap(u);
         ui.costEl.textContent = getUpgradeCostBig(u,0).toString();
-        const multNum = u._multBN.toNumberSafe();
-        ui.multEl.textContent = '+' + (isFinite(multNum) ? multNum.toFixed(3) : u._multBN.toString());
+        const multBN = u._multBN.clone();
+        ui.multEl.textContent = (multBN.e > 12) ? multBN.toString() : ('+' + (multBN.toNumberSafe()||0).toFixed(3));
         const rateClone = u._rateBN.clone();
         rateClone.mulByNumber(globalPrestige.rMul || 1);
-        const rateNum = rateClone.toNumberSafe();
-        ui.rateEl.textContent = isFinite(rateNum) ? rateNum.toFixed(2) : rateClone.toString();
+        ui.rateEl.textContent = (rateClone.e > 12) ? rateClone.toString() : (rateClone.toNumberSafe()||0).toFixed(2);
         ui.ascEl.textContent = u.ascendCount || 0;
         ui.pLvEl.textContent = (u.prestigeLevel && u.prestigeLevel.mult) || 0;
         ui.pLvREl.textContent = (u.prestigeLevel && u.prestigeLevel.rate) || 0;
@@ -407,9 +433,6 @@
 
       document.getElementById('inftyPoints').textContent = String(infinityPoints);
 
-      // update skill tree node UI
-      updateSkillTreeUI();
-
       renderPrestigeShop();
     }
 
@@ -430,8 +453,8 @@
       const logStart = bigNumLog10(INF_START);
       const logTarget = bigNumLog10(INF_TARGET);
       if (!isFinite(logVal)) return 0;
-      if (logVal < logStart) return 0;
-      if (logVal >= logTarget) return 100;
+      if (logVal < logStart) return 0;               // INF_START より小さければ 0%
+      if (logVal >= logTarget) return 100;           // INF_TARGET で 100%
       const pct = (logVal - logStart) / (logTarget - logStart) * 100;
       return Math.max(0, Math.min(100, pct));
     }
@@ -448,22 +471,10 @@
       return total;
     }
 
-    // getMultiplierIncrementBig now returns BigNum and uses generatorPoints BigNum
     function getMultiplierIncrementBig(u){
-      // base increases with level (use number for level which is safe)
-      const baseNum = 0.005 * Math.pow(1 + Math.min(u.level, 1e7), 0.38);
-      const baseBN = BigNum.fromNumber(Math.min(baseNum, 1e12));
-      // generatorPoints is BigNum: genFactor = 1 + GP * 0.1
-      const gp = generatorPoints.toNumberSafe();
-      let genFactor = 1;
-      if (isFinite(gp)) genFactor = 1 + gp * 0.1;
-      // if generatorPoints too large to convert, approximate using mantissa
-      else {
-        // use mantissa exponent approx -> treat 10^(e) scale
-        genFactor = 1 + Math.pow(10, generatorPoints.e - 1) * 0.1; // rough fallback
-      }
-      baseBN.mulByNumber(genFactor);
-      return baseBN;
+      const base = 0.005 * Math.pow(1 + u.level, 0.38);
+      const genFactor = 1 + (generatorPoints || 0) * 0.1;
+      return BigNum.fromNumber(Math.min(base * genFactor, 1e12));
     }
 
     function buyUpgrade(idx, qty, silent){
@@ -497,6 +508,7 @@
       const exponent = n * 0.12;
       const multiplier = Math.pow(Math.max(1, u.speedMult), exponent);
       u._rateBN.mulByNumber(multiplier);
+      if (u._rateBN.e > 300) u._rateBN = BigNum.fromNumber(1e300);
       u.level += n;
       saveGame();
       updateUI_throttled(true);
@@ -526,7 +538,7 @@
       const diff = log10val - 20;
       if (!isFinite(diff) || diff < 0) return 0;
       const points = Math.floor(diff) + 1;
-      return Math.max(1, Math.floor(points * (globalPrestige.prestigeGainMult || 1)));
+      return points;
     }
 
     function doPrestige(force){
@@ -561,7 +573,7 @@
       if (!confirm('無限を取得しますか？（Generationを全てリセットし、無限ポイント (IP) +1）')) return;
       infinityPoints += 1;
 
-      // Reset Generation
+      // Reset Generation (but keep IP and skillNodes unlocked)
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -572,11 +584,7 @@
       lastPrestigeScore = BigNum.zero();
 
       costBaseMultVar = 1.15;
-      globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1; globalPrestige.prestigeGainMult = 1;
-
-      generatorPoints = BigNum.zero();
-      generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
-      generatorSpeedMult = 1.0;
+      globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
 
       speedMultiplier = 1.0;
       paused = false;
@@ -591,7 +599,7 @@
 
     // RESET (full)
     function fullReset(){
-      try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
+      try { localStorage.removeItem('idle_all_big_save_v3'); } catch(e){}
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -602,10 +610,11 @@
       lastPrestigeScore = BigNum.zero();
       infinityPoints = 0;
       costBaseMultVar = 1.15;
-      globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1; globalPrestige.prestigeGainMult = 1;
-      generatorPoints = BigNum.zero();
+      globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
+      generatorPoints = 0;
       generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
-      generatorSpeedMult = 1.0;
+      skillNodes = [];
+      buildSkillNodes();
       speedMultiplier = 1.0;
       paused = false;
       displayMoneyNum = 0;
@@ -636,19 +645,21 @@
           costBaseMultVar,
           speedMultiplier,
           paused,
-          generatorPoints: generatorPoints.toObject(),
-          generators
+          generatorPoints,
+          generators,
+          skillNodes: skillNodes.map(n => ({id:n.id, unlocked:n.unlocked, applied:n.applied}))
         };
-        localStorage.setItem('idle_all_big_save', JSON.stringify(save));
-      } catch(e){ console.warn('save fail', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
+        localStorage.setItem('idle_all_big_save_v3', JSON.stringify(save));
+      } catch(e){ console.warn('save fail', e); try{ localStorage.removeItem('idle_all_big_save_v3'); }catch(e){} }
     }
 
     function loadGame(){
       try {
-        const raw = localStorage.getItem('idle_all_big_save');
+        buildSkillNodes(); // ensure nodes exist before merging
+        const raw = localStorage.getItem('idle_all_big_save_v3');
         if (!raw) return;
         let data;
-        try { data = JSON.parse(raw); } catch(parseErr){ console.warn('save parse failed, clearing', parseErr); localStorage.removeItem('idle_all_big_save'); return; }
+        try { data = JSON.parse(raw); } catch(parseErr){ console.warn('save parse failed, clearing', parseErr); localStorage.removeItem('idle_all_big_save_v3'); return; }
         if (!data || typeof data !== 'object') return;
 
         if (data.money && typeof data.money.m === 'number') money = BigNum.fromObject(data.money);
@@ -681,7 +692,7 @@
         if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, Math.round(data.speedMultiplier)));
         if (typeof data.paused === 'boolean') paused = !!data.paused;
 
-        if (data.generatorPoints && typeof data.generatorPoints.m === 'number') generatorPoints = BigNum.fromObject(data.generatorPoints);
+        if (typeof data.generatorPoints === 'number') generatorPoints = data.generatorPoints;
         if (Array.isArray(data.generators) && data.generators.length === 10){
           generators = data.generators.map(g => ({
             count: Number.isFinite(+g.count) ? Math.max(0, Math.floor(+g.count)) : 0,
@@ -689,8 +700,16 @@
           }));
         }
 
+        if (Array.isArray(data.skillNodes)){
+          // apply unlocked states
+          data.skillNodes.forEach(saved => {
+            const node = skillNodes.find(n => n.id === saved.id);
+            if (node){ node.unlocked = !!saved.unlocked; node.applied = !!saved.applied; if (node.unlocked && !node.applied) applySkillEffect(node); }
+          });
+        }
+
         sanitizeUpgrades(upgrades);
-      } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
+      } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save_v3'); }catch(e){} }
     }
 
     // simulation + render
@@ -706,17 +725,14 @@
 
     function simulateGenerators(dt){
       const g1count = generators[0].count || 0;
-      const g1PerSecPer = 0.01 * generatorSpeedMult; // seconds -> GP per sec per G1
-      // produce GP as BigNum fractional
-      if (g1count > 0){
-        const gpGain = g1count * g1PerSecPer * dt;
-        generatorPoints.addInPlace(BigNum.fromNumber(gpGain));
-      }
+      const g1PerSecPer = 0.001 * (1 + (skillNodes.filter(n=>n.unlocked && n.effect.type==='genBoost').length * 0.02));
+      const gpGain = g1count * g1PerSecPer * dt;
+      if (gpGain > 0) generatorPoints += gpGain;
 
       for (let tier = 1; tier < 10; tier++){
         const g = generators[tier];
         if (!g || g.count <= 0) continue;
-        const perSec = 1.0 * g.count * generatorSpeedMult; // per second produce lower-tier count
+        const perSec = 0.1 * g.count;
         g.progress += perSec * dt;
         if (g.progress >= 1){
           const inc = Math.floor(g.progress);
@@ -734,6 +750,8 @@
         let progRate = NaN;
         try { progRate = (u._rateBN && typeof u._rateBN.toNumberSafe === 'function') ? u._rateBN.toNumberSafe() : NaN; } catch(e){ progRate = NaN; }
         if (!isFinite(progRate) || progRate <= 0) progRate = (u.baseRate || 0.01);
+        // cap progRate so it doesn't become Infinity
+        if (progRate === Infinity) progRate = 1e12;
         progRate *= (globalPrestige.rMul || 1);
         let incProg = progRate * dt * 100 * s;
         if (!isFinite(incProg)) incProg = 0;
@@ -743,15 +761,15 @@
           let completed = Math.floor(currProgress[i] / 100);
           if (completed > 1000000) completed = 1000000;
           currProgress[i] -= completed * 100;
-          // multiplier increment now computed in BigNum domain
           const incBaseBN = getMultiplierIncrementBig(u);
           incBaseBN.mulByNumber(completed);
           u._multBN.addInPlace(incBaseBN);
+          if (u._multBN.e > 300) u._multBN = BigNum.fromNumber(1e300);
         }
         u.progress = currProgress[i];
       }
 
-      // compute total mult
+      // compute total multiplier as BigNum
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -763,15 +781,15 @@
         totalMultBN.mulInPlace(factorBN);
       }
 
-      // apply prestige multiplier
       const addBN = baseIncome.clone();
       addBN.mulInPlace(totalMultBN);
-      addBN.mulInPlace(prestigeMult);
       addBN.mulByNumber(dt * s);
       money.addInPlace(addBN);
 
-      // cap money to INF_TARGET (but not earlier)
-      if (money.gteBig(INF_TARGET)) money = INF_TARGET.clone();
+      // clamp money to INF_TARGET if it reaches or exceeds it to avoid overflow and accidental resets
+      if (money.gteBig(INF_TARGET)) {
+        money = INF_TARGET.clone();
+      }
 
       simulateGenerators(dt);
     }
@@ -797,19 +815,22 @@
 
       const alpha = FIXED_DT === 0 ? 0 : (accumulator / FIXED_DT);
 
+      // money display: if exponent big use BigNum string
+      const moneyEl = document.getElementById('money');
       if (money.m === 0){
         displayMoneyNum += (0 - displayMoneyNum) * 0.12;
-        document.getElementById('money').textContent = fmtSmall(displayMoneyNum);
+        moneyEl.textContent = fmtSmall(displayMoneyNum);
       } else if (money.e <= 12){
         const v = money.toNumberSafe();
         if (isFinite(v)){
           displayMoneyNum += (v - displayMoneyNum) * 0.12;
-          document.getElementById('money').textContent = fmtSmall(displayMoneyNum);
+          moneyEl.textContent = fmtSmall(displayMoneyNum);
         } else {
-          document.getElementById('money').textContent = money.toString();
+          moneyEl.textContent = money.toString();
         }
       } else {
-        document.getElementById('money').textContent = money.toString();
+        // big: show BN string
+        moneyEl.textContent = money.toString();
       }
 
       for (let i=0;i<upgrades.length;i++){
@@ -912,6 +933,80 @@
       alert(`G${tier+1} を ${qty} 個購入しました（IP -${cost}）`);
     }
 
+    function unlockSkill(nodeId){
+      const node = skillNodes.find(n=>n.id===nodeId);
+      if (!node) return alert('ノードが見つかりません');
+      if (node.unlocked) return alert('既にアンロック済み');
+      // check parents
+      for (let p of node.parents){
+        const pn = skillNodes.find(n=>n.id===p);
+        if (pn && !pn.unlocked) return alert('親ノードを先にアンロックしてください');
+      }
+      if (infinityPoints < node.cost) return alert('IPが足りません');
+      infinityPoints -= node.cost;
+      node.unlocked = true;
+      applySkillEffect(node);
+      saveGame();
+      updateUI_throttled(true);
+      alert(node.name + ' をアンロックしました');
+    }
+
+    function renderSkillTree(){
+      const shop = document.getElementById('prestigeShop');
+      if (!shop) return;
+      // find or create container
+      let wrapper = document.getElementById('skillTreeWrap');
+      if (wrapper) wrapper.remove();
+      wrapper = document.createElement('div'); wrapper.id='skillTreeWrap';
+      const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('id','skillSvg'); svg.setAttribute('width','100%'); svg.setAttribute('height','380');
+      // draw connectors
+      skillNodes.forEach(node=>{
+        node.parents.forEach(pid=>{
+          const p = skillNodes.find(n=>n.id===pid);
+          if (!p) return;
+          const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+          line.setAttribute('x1', p.x); line.setAttribute('y1', p.y);
+          line.setAttribute('x2', node.x); line.setAttribute('y2', node.y);
+          line.setAttribute('stroke','#3a4b50'); line.setAttribute('stroke-width','2');
+          svg.appendChild(line);
+        });
+      });
+      // draw nodes
+      skillNodes.forEach(node=>{
+        const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+        g.classList.add('node');
+        g.setAttribute('transform', `translate(${node.x},${node.y})`);
+        const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        circle.setAttribute('r','18');
+        if (node.unlocked) circle.setAttribute('fill','#7bf3a8'); else circle.setAttribute('fill','#2b3940');
+        circle.setAttribute('stroke','#444');
+        g.appendChild(circle);
+        const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+        text.setAttribute('x','-16'); text.setAttribute('y','4'); text.textContent = node.id+1;
+        g.appendChild(text);
+        // click handler
+        g.addEventListener('click', ()=>{
+          // open detail / unlock
+          const detail = document.getElementById('skillDetail');
+          if (!detail) return;
+          detail.innerHTML = `<strong>${node.name}</strong><div class="small">Cost: ${node.cost} IP</div><div class="small">Effect: ${JSON.stringify(node.effect)}</div>`;
+          const btn = document.createElement('button'); btn.className='btn btn-small'; btn.textContent = node.unlocked ? 'アンロック済' : 'アンロック';
+          btn.disabled = node.unlocked;
+          btn.addEventListener('click', ()=> unlockSkill(node.id));
+          detail.appendChild(btn);
+        });
+        svg.appendChild(g);
+      });
+
+      // right panel list
+      const list = document.createElement('div'); list.id='skillList';
+      list.innerHTML = '<div><strong>Infinityアップグレード（スキルツリー）</strong></div><div id="skillDetail" class="small">ノードをクリックしてください</div>';
+
+      wrapper.appendChild(svg); wrapper.appendChild(list);
+      shop.appendChild(wrapper);
+    }
+
     function renderPrestigeShop(){
       const shop = document.getElementById('prestigeShop');
       if (!shop) return;
@@ -946,7 +1041,7 @@
       });
 
       const ipCard = document.createElement('div'); ipCard.className='card';
-      ipCard.innerHTML = `<div><strong>無限ポイント(IP): ${infinityPoints}</strong></div><div class="small">GP: ${generatorPoints.toString()}</div>`;
+      ipCard.innerHTML = `<div><strong>無限ポイント(IP): ${infinityPoints}</strong></div><div class="small">GP: ${generatorPoints.toFixed(4)}</div>`;
       shop.appendChild(ipCard);
 
       const genContainer = document.createElement('div'); genContainer.className='card col';
@@ -966,99 +1061,9 @@
         genContainer.appendChild(line);
       }
       shop.appendChild(genContainer);
-    }
 
-    // ------------------ Skill Tree (50 nodes) -----------------
-
-    function renderSkillTree(){
-      const wrap = document.getElementById('skillTreeCanvas');
-      const svg = document.getElementById('skillSVG');
-      wrap.querySelectorAll('.skillNode').forEach(n => n.remove());
-      svg.innerHTML = '';
-      // layout grid: 10 columns x 5 rows
-      const cols = 10, rows = 5;
-      const padX = 20, padY = 10;
-      const nodeW = 80, nodeH = 40;
-      const areaW = wrap.clientWidth || wrap.offsetWidth || 1000;
-      const areaH = wrap.clientHeight || wrap.offsetHeight || 420;
-      const cellW = (areaW - padX*2) / cols;
-      const cellH = (areaH - padY*2) / rows;
-      const positions = {};
-      for (let r=0;r<rows;r++){
-        for (let c=0;c<cols;c++){
-          const idx = r*cols + c;
-          if (idx >= skillNodes.length) break;
-          const x = padX + c*cellW + (cellW - nodeW)/2;
-          const y = padY + r*cellH + (cellH - nodeH)/2;
-          positions[idx] = {x,y};
-          const el = document.createElement('div');
-          el.className = 'skillNode' + (skillNodes[idx].purchased ? ' purchased' : '');
-          el.style.left = x + 'px'; el.style.top = y + 'px';
-          el.id = 'skillNode_' + idx;
-          el.innerHTML = `<div style="font-size:11px;line-height:1">${skillNodes[idx].title}</div><div class="small">${skillNodes[idx].cost} IP</div>`;
-          el.addEventListener('click', ()=> toggleBuySkill(idx));
-          wrap.appendChild(el);
-        }
-      }
-      // draw connectors: each node connects to nodes below (same col and adjacent col)
-      for (let i=0;i<skillNodes.length;i++){
-        const pos = positions[i];
-        if (!pos) continue;
-        const children = [];
-        const row = Math.floor(i/cols), col = i%cols;
-        // connect to two children below if exist
-        const c1 = (row+1)*cols + col;
-        const c2 = (row+1)*cols + Math.min(cols-1, col+1);
-        [c1,c2].forEach(ci=>{ if (ci < skillNodes.length) children.push(ci); });
-        children.forEach(ch=>{
-          const p2 = positions[ch];
-          if (!p2) return;
-          const x1 = pos.x + nodeW/2, y1 = pos.y + nodeH;
-          const x2 = p2.x + nodeW/2, y2 = p2.y;
-          const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-          const dx = Math.abs(x2-x1);
-          const mx = (x1 + x2)/2;
-          const d = `M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`;
-          path.setAttribute('d', d);
-          path.setAttribute('stroke', 'rgba(200,200,200,0.12)');
-          path.setAttribute('fill', 'none');
-          path.setAttribute('stroke-width', '2');
-          svg.appendChild(path);
-        });
-      }
-    }
-
-    function updateSkillTreeUI(){
-      skillNodes.forEach((n,i)=>{
-        const el = document.getElementById('skillNode_' + i);
-        if (!el) return;
-        el.classList.toggle('purchased', n.purchased);
-        // lock logic: require parent purchased except first row
-        const cols = 10; const row = Math.floor(i/cols);
-        if (row === 0) el.classList.remove('locked');
-        else {
-          const parentIdx = (row-1)*cols + (i%cols);
-          if (parentIdx < 0 || !skillNodes[parentIdx] || !skillNodes[parentIdx].purchased) el.classList.add('locked');
-          else el.classList.remove('locked');
-        }
-      });
-    }
-
-    function toggleBuySkill(idx){
-      const node = skillNodes[idx];
-      const el = document.getElementById('skillNode_' + idx);
-      if (!node) return;
-      // lock check
-      const cols = 10; const row = Math.floor(idx/cols);
-      if (row > 0){ const parentIdx = (row-1)*cols + (idx%cols); if (!skillNodes[parentIdx].purchased){ alert('まず上のノードを取得してください'); return; } }
-      if (node.purchased){ alert('既に購入済み'); return; }
-      if (infinityPoints < node.cost){ alert('IPが足りません'); return; }
-      infinityPoints -= node.cost;
-      node.purchased = true;
-      node.apply(node);
-      saveGame();
+      // render skill tree at end
       renderSkillTree();
-      updateUI_throttled(true);
     }
 
     // Debug support
@@ -1115,6 +1120,5 @@
     showError(err && err.message ? err.message : String(err));
   }
 })();
-</script>
-</body>
+</script></body>
 </html>
