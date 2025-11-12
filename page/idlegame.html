@@ -24,6 +24,10 @@
   .shop{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
   .shop .card{background:rgba(255,255,255,0.03);padding:8px;border-radius:6px}
   .col{display:flex;flex-direction:column;gap:6px}
+  .skillsGrid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px}
+  .skillBtn{background:rgba(255,255,255,0.02);padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);cursor:pointer;font-size:0.8em}
+  .skillBtn.purchased{box-shadow:0 0 8px rgba(123,243,168,0.6);border-color:#7bf3a8}
+  .tune{display:flex;gap:8px;align-items:center}
 </style>
 </head>
 <body>
@@ -130,7 +134,7 @@
 
     // --------------- constants & templates ---------------
     const INF_TARGET = BigNum.fromMantExp(1.8, 308); // 1.8e308
-    const INF_START  = BigNum.fromMantExp(1.0, 307); // 1e307 -> meter start
+    // NOTE: INF_START used previously; for meter we start mapping from 1 (10^0) so user sees meter from 0
     const PROGRESS_CAP = 1e9;
     let costBaseMultVar = 1.15;
 
@@ -159,11 +163,8 @@
     let infinityPoints = 0; // IP
 
     // global prestige bonuses (purchased with prestigePoints)
-    const globalPrestige = {
-      mAdd: 0,   // additive to upgrade _mult (as number)
-      rMul: 1.0, // multiplicative to upgrade rate
-      costMul: 1.0, // multiplicative to cost (less than 1 reduces cost)
-    };
+    const baseGlobalPrestige = { mAdd: 0, rMul: 1.0, costMul: 1.0 };
+    const globalPrestige = Object.assign({}, baseGlobalPrestige);
 
     // --- Infinity / Generators (Step4) ---
     let generatorPoints = 0; // GP
@@ -180,9 +181,130 @@
     const upgradeUI = [];
 
     // ----- softcap / prestige tuning parameters (調整可能) -----
-    const softCapStartLog = 150; // softCap start at 10^150 (log10)
-    const softCapStrength = 0.01; // small = gentler softcap; larger => stronger suppression
+    let softCapStartLog = 150; // softCap start at 10^150 (log10)
+    let softCapStrength = 0.01; // small = gentler softcap; larger => stronger suppression
     // ------------------------------------------------------------
+
+    // -------------------------
+    // SkillNodes (50 nodes) -- define early to avoid reference-before-definition
+    // -------------------------
+    const SKILL_STORAGE_KEY = 'idle_skill_nodes_v1';
+    // generate 50 nodes programmatically with diverse concrete effects
+    const skillNodes = new Array(50).fill(0).map((_,i)=>{
+      // vary effects among a set
+      const effects = [
+        {type:'mAdd', value:0.01},             // small additive to per-upgrade multiplier
+        {type:'rMul', value:1.02},             // multiplicative to per-upgrade rate
+        {type:'costMul', value:0.95},          // reduce cost
+        {type:'baseIncome', value:1.05},       // multiply baseIncome
+        {type:'genEff', value:1.10},           // multiply generator efficiency
+      ];
+      const eff = effects[i % effects.length];
+      return {
+        id: 'S' + (i+1),
+        name: (i+1) + '. ' + (eff.type === 'mAdd' ? '微増M' : eff.type === 'rMul' ? '速度+' : eff.type === 'costMul' ? 'コスト減' : eff.type === 'baseIncome' ? '基礎収入+' : 'ジェネ効率+'),
+        effect: eff,
+        purchased: false,
+        cost: Math.ceil(2 + Math.pow(1.18, i)) // modest scaling cost (prestigePoints)
+      };
+    });
+
+    function loadSkillNodes(){
+      try {
+        const raw = localStorage.getItem(SKILL_STORAGE_KEY);
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr) || arr.length !== skillNodes.length) return;
+        for (let i=0;i<skillNodes.length;i++){
+          skillNodes[i].purchased = !!arr[i].purchased;
+        }
+      } catch(e){ console.warn('loadSkillNodes fail', e); }
+    }
+    function saveSkillNodes(){
+      try {
+        const arr = skillNodes.map(s => ({id:s.id, purchased: !!s.purchased}));
+        localStorage.setItem(SKILL_STORAGE_KEY, JSON.stringify(arr));
+      } catch(e){ console.warn('saveSkillNodes fail', e); }
+    }
+    function applySkillEffects(){
+      // reset to base, then apply every purchased node exactly once
+      Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
+      // reset baseIncome to base 1 times current prestigeMult? We treat baseIncome as base number; we'll keep baseIncomeBase separately
+      // For simplicity we'll store original base income baseline here:
+      let baseIncomeBase = BigNum.fromNumber(1);
+      baseIncome = baseIncomeBase.clone();
+
+      // generatorPoints unaffected here; gen efficiency to be applied in relevant places (we store local multiplier)
+      let genEffMultiplier = 1.0;
+
+      for (let i=0;i<skillNodes.length;i++){
+        const s = skillNodes[i];
+        if (!s.purchased) continue;
+        const eff = s.effect;
+        switch(eff.type){
+          case 'mAdd':
+            globalPrestige.mAdd += eff.value;
+            break;
+          case 'rMul':
+            globalPrestige.rMul *= eff.value;
+            break;
+          case 'costMul':
+            globalPrestige.costMul *= eff.value;
+            break;
+          case 'baseIncome':
+            baseIncome.mulByNumber(eff.value);
+            break;
+          case 'genEff':
+            genEffMultiplier *= eff.value;
+            break;
+        }
+      }
+      // apply genEffMultiplier to generator behavior: store into a variable used by generator simulation
+      window.__genEffMultiplier = genEffMultiplier;
+    }
+
+    function initSkillUI(){
+      // insert skill UI into prestigeShop
+      const shop = document.getElementById('prestigeShop');
+      if (!shop) return;
+      // create skill area container
+      const existing = document.getElementById('skillArea');
+      if (existing) existing.remove();
+      const skillCard = document.createElement('div');
+      skillCard.id = 'skillArea';
+      skillCard.className = 'card col';
+      skillCard.innerHTML = `<div><strong>無限スキルツリー（Skill Nodes）</strong></div><div class="small">タップして詳細・購入（Cost = prestige points）</div>`;
+      const grid = document.createElement('div');
+      grid.className = 'skillsGrid';
+      skillNodes.forEach((s, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'skillBtn' + (s.purchased ? ' purchased' : '');
+        btn.id = 'skillBtn_' + idx;
+        btn.textContent = s.name + '\n(' + s.cost + ')';
+        btn.addEventListener('click', ()=>{
+          const detail = `ID:${s.id}\n${s.name}\nEffect: ${s.effect.type} × ${s.effect.value}\nCost: ${s.cost} pts\nPurchased: ${s.purchased ? 'Yes' : 'No'}`;
+          if (s.purchased){
+            alert(detail);
+            return;
+          }
+          if (confirm(detail + '\n\n購入しますか？（プレステージポイントを消費）')){
+            if (prestigePoints >= s.cost){
+              prestigePoints -= s.cost;
+              s.purchased = true;
+              saveSkillNodes();
+              applySkillEffects();
+              saveGame();
+              updateUI_throttled(true);
+              initSkillUI();
+              alert('購入しました: ' + s.name);
+            } else alert('プレステージポイントが足りません');
+          }
+        });
+        grid.appendChild(btn);
+      });
+      skillCard.appendChild(grid);
+      shop.appendChild(skillCard);
+    }
 
     // helpers
     function fmtSmall(n){
@@ -287,43 +409,40 @@
       currProgress = new Array(upgrades.length).fill(0);
       for (let i=0;i<upgrades.length;i++){ prevProgress[i] = upgrades[i].progress || 0; currProgress[i] = upgrades[i].progress || 0; }
 
+      // skill UI must be rendered inside prestigeShop
+      initSkillUI();
       renderPrestigeShop();
     }
 
     // ---- New: softCap & prestige boost functions ----
     function softCapMultiplierForScore(bn){
       // returns a JS Number multiplier <= 1 (BigNum multiplication of income will use this)
-      // uses log10-based softcap starting at softCapStartLog
       const logVal = bigNumLog10(bn);
       if (!isFinite(logVal)) return 1;
       if (logVal <= softCapStartLog) return 1;
       const excess = logVal - softCapStartLog;
-      // gentle suppression: 10^(-softCapStrength * excess)
-      // adjust softCapStrength variable to tune (smaller -> gentler)
       const reduction = Math.pow(10, -softCapStrength * excess);
       if (!isFinite(reduction) || reduction <= 0) return 0;
       return Math.max(0, Math.min(1, reduction));
     }
 
     function prestigeBoostMultiplier(){
-      // プレステージ効果は「最終収入に対して指数的に滑らかに増える」
-      // 実装: multiplier = exp(0.01 * sqrt(prestigePoints))
-      // small prestigePoints -> ほぼ 1、増えるほど指数的に上昇（制御のため sqrt を使用）
+      // multiplier = exp(0.01 * sqrt(prestigePoints))
       const pp = Number(prestigePoints) || 0;
       if (pp <= 0) return 1;
-      const exponent = 0.01 * Math.sqrt(pp); // 0.01 単位の滑らかさをここで実現
-      // cap exponent to avoid Infinity in Math.exp
+      const exponent = 0.01 * Math.sqrt(pp);
       const safeExp = Math.min(exponent, 700);
       const mult = Math.exp(safeExp);
       if (!isFinite(mult)) return Number.MAX_VALUE;
       return mult;
     }
 
+    // map Infinity progress from money >=1 to INF_TARGET (so meter starts from 0)
     function computeInfinityProgressPercent(bn){
       if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
       if (bn.m === 0) return 0;
       const logVal = bigNumLog10(bn);
-      const logStart = bigNumLog10(INF_START);
+      const logStart = 0; // 10^0 == 1 -> start counting from 1
       const logTarget = bigNumLog10(INF_TARGET);
       if (!isFinite(logVal)) return 0;
       if (logVal < logStart) return 0;
@@ -340,18 +459,15 @@
       if (!force && now - lastUI < 100) return;
       lastUI = now;
 
-      // compute total multiplier using BigNum fully (avoid JS number overflow)
+      // compute total multiplier using BigNum fully
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
-        const pMult = 0.02 * ((u.prestigeLevel && u.prestigeLevel.mult) || 0); // small additive
+        const pMult = 0.02 * ((u.prestigeLevel && u.prestigeLevel.mult) || 0);
         const asc = 0.05 * (u.ascendCount || 0);
         const factorBN = BigNum.fromNumber(1);
-        // add u._multBN (BigNum)
         factorBN.addInPlace(u._multBN);
-        // add numeric additives (converted via addNumber)
         factorBN.addNumber(pMult + asc + (globalPrestige.mAdd || 0));
-        // multiply to total
         totalMultBN.mulInPlace(factorBN);
       }
 
@@ -359,18 +475,19 @@
       const rateBN = baseIncome.clone();
       rateBN.mulInPlace(totalMultBN);
 
-      // apply prestige boost as final exponential multiplier (spec requested)
+      // apply prestige boost (exponential) to final income
       const prestigeMultNum = prestigeBoostMultiplier();
-      // if prestigeMultNum extremely large, use mulByNumber carefully (it accepts number)
       rateBN.mulByNumber(prestigeMultNum);
 
-      // For display: if rateBN is small enough convert to number otherwise show BigNum string
+      // Decide whether to display as JS number or BigNum string
+      // If total multiplier has grown large (> e16) -> show BigNum
+      const totalLog = bigNumLog10(totalMultBN);
       const rateDisplayNum = rateBN.toNumberSafe();
       const rateEl = document.getElementById('rate');
-      if (isFinite(rateDisplayNum) && Math.abs(rateBN.e) <= 16){
-        rateEl.textContent = rateDisplayNum.toFixed(2);
-      } else {
+      if ((isFinite(totalLog) && totalLog > 16) || (rateBN.e > 16) || !isFinite(rateDisplayNum)){
         rateEl.textContent = rateBN.toString();
+      } else {
+        rateEl.textContent = isFinite(rateDisplayNum) ? rateDisplayNum.toFixed(2) : rateBN.toString();
       }
 
       // show formula (human readable summary)
@@ -421,7 +538,7 @@
       const pct = computeInfinityProgressPercent(money);
       inftyFill.style.transform = 'scaleX(' + (pct/100) + ')';
       const pctEl = document.getElementById('inftyPct');
-      if (pctEl) pctEl.textContent = pct.toFixed(2) + '%';
+      if (pctEl) pctEl.textContent = pct.toFixed(6) + '%';
       if (money.gteBig(INF_TARGET)) inftyBtn.classList.remove('invisible'); else inftyBtn.classList.add('invisible');
 
       document.getElementById('inftyPoints').textContent = String(infinityPoints);
@@ -450,7 +567,7 @@
 
     function getMultiplierIncrementBig(u){
       const base = 0.005 * Math.pow(1 + u.level, 0.38);
-      const genFactor = 1 + (generatorPoints || 0) * 0.1;
+      const genFactor = 1 + ((window.__genEffMultiplier || 1) - 1) + (generatorPoints || 0) * 0.1;
       return BigNum.fromNumber(Math.min(base * genFactor, 1e12));
     }
 
@@ -550,7 +667,7 @@
       if (!confirm('無限を取得しますか？（Generationを全てリセットし、無限ポイント (IP) +1）')) return;
       infinityPoints += 1;
 
-      // Reset Generation (user requested reset)
+      // Reset Generation (but keep purchased skillNodes)
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -561,13 +678,15 @@
       lastPrestigeScore = BigNum.zero();
 
       costBaseMultVar = 1.15;
-      globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
+      Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
 
       speedMultiplier = 1.0;
       paused = false;
       displayMoneyNum = 0;
       prevProgress = new Array(upgrades.length).fill(0);
       currProgress = new Array(upgrades.length).fill(0);
+      // keep skillNodes purchased state (per design)
+      applySkillEffects();
       initUI();
       saveGame();
       updateUI_throttled(true);
@@ -577,6 +696,8 @@
     // RESET (full)
     function fullReset(){
       try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
+      try { localStorage.removeItem(SKILL_STORAGE_KEY); } catch(e){}
+      // reset everything
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -587,7 +708,7 @@
       lastPrestigeScore = BigNum.zero();
       infinityPoints = 0;
       costBaseMultVar = 1.15;
-      globalPrestige.mAdd = 0; globalPrestige.rMul = 1; globalPrestige.costMul = 1;
+      Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
       generatorPoints = 0;
       generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
       speedMultiplier = 1.0;
@@ -595,6 +716,9 @@
       displayMoneyNum = 0;
       prevProgress = new Array(upgrades.length).fill(0);
       currProgress = new Array(upgrades.length).fill(0);
+      // reset skill nodes
+      skillNodes.forEach(s => s.purchased = false);
+      saveSkillNodes();
       initUI();
       saveGame();
       updateUI_throttled(true);
@@ -621,9 +745,12 @@
           speedMultiplier,
           paused,
           generatorPoints,
-          generators
+          generators,
+          softCapStartLog,
+          softCapStrength
         };
         localStorage.setItem('idle_all_big_save', JSON.stringify(save));
+        saveSkillNodes();
       } catch(e){ console.warn('save fail', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
 
@@ -673,13 +800,21 @@
           }));
         }
 
+        if (typeof data.softCapStartLog === 'number') softCapStartLog = data.softCapStartLog;
+        if (typeof data.softCapStrength === 'number') softCapStrength = data.softCapStrength;
+
         sanitizeUpgrades(upgrades);
       } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
 
     // simulation + render
     sanitizeUpgrades(upgrades);
+    // load saves (upgrades + money)
     loadGame();
+    // load skill nodes BEFORE applying effects / UI
+    loadSkillNodes();
+    // apply skill effects (skillNodes may modify baseIncome/globalPrestige)
+    applySkillEffects();
     sanitizeUpgrades(upgrades);
     initUI();
     updateUI_throttled(true);
@@ -690,14 +825,14 @@
 
     function simulateGenerators(dt){
       const g1count = generators[0].count || 0;
-      const g1PerSecPer = 0.001;
+      const g1PerSecPer = 0.001 * (window.__genEffMultiplier || 1);
       const gpGain = g1count * g1PerSecPer * dt;
       if (gpGain > 0) generatorPoints += gpGain;
 
       for (let tier = 1; tier < 10; tier++){
         const g = generators[tier];
         if (!g || g.count <= 0) continue;
-        const perSec = 0.1 * g.count;
+        const perSec = 0.1 * g.count * (window.__genEffMultiplier || 1);
         g.progress += perSec * dt;
         if (g.progress >= 1){
           const inc = Math.floor(g.progress);
@@ -751,7 +886,7 @@
       const prestigeMultNum = prestigeBoostMultiplier();
       addBN.mulByNumber(prestigeMultNum);
 
-      // apply softcap multiplier (based on total score)
+      // apply softcap multiplier (based on total money)
       const softMult = softCapMultiplierForScore(money);
       addBN.mulByNumber(softMult);
 
@@ -762,7 +897,6 @@
 
       // clamp money to INF_TARGET if it reaches or exceeds it to avoid overflow and accidental resets
       if (money.gteBig(INF_TARGET)) {
-        // clamp to INF_TARGET so UI can show it & player can click "無限を得る"
         money = INF_TARGET.clone();
       }
 
@@ -909,8 +1043,22 @@
     function renderPrestigeShop(){
       const shop = document.getElementById('prestigeShop');
       if (!shop) return;
-      shop.innerHTML = '';
+      // keep existing content, clear and re-add
+      // note: skill area is handled in initSkillUI
+      // but we also add tuning controls here
+      const existing = shop.querySelector('.tuneArea');
+      if (existing) existing.remove();
+      const tune = document.createElement('div');
+      tune.className = 'card tuneArea';
+      tune.innerHTML = `<div><strong>Softcap チューニング</strong></div>
+        <div class="small tune">Start log10: <input id="softStart" type="number" style="width:80px" value="${softCapStartLog}"> Strength: <input id="softStr" type="number" step="0.001" style="width:80px" value="${softCapStrength}"> <button id="applySoft" class="btn btn-small">適用</button></div>
+        <div class="small">※ softcapStart を上げる / strength を下げると e150 などでの頭打ちを緩和できます。</div>`;
+      shop.appendChild(tune);
+      document.getElementById('softStart').addEventListener('change', (e)=> { softCapStartLog = Number(e.target.value) || softCapStartLog; saveGame(); updateUI_throttled(true); });
+      document.getElementById('softStr').addEventListener('change', (e)=> { softCapStrength = Number(e.target.value) || softCapStrength; saveGame(); updateUI_throttled(true); });
+      document.getElementById('applySoft').addEventListener('click', ()=> { saveGame(); updateUI_throttled(true); alert('softcap 設定を保存しました'); });
 
+      // info + generators area appended after skill area
       const info = document.createElement('div'); info.className='card';
       info.innerHTML = `<div><strong>プレステージポイント: ${prestigePoints}</strong></div><div class="small">プレステージ回数: ${prestigeCount}</div>`;
       shop.appendChild(info);
@@ -962,7 +1110,7 @@
       shop.appendChild(genContainer);
     }
 
-    // Debug support
+    // Debug support (kept)
     (function() {
       const params = window.location.search;
       const match = params.match(/\?=(.+)/);
