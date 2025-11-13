@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — Prestige & Infinity (Step1-3 実装)</title>
+<title>Idle — Prestige & Infinity (Step4 修正版)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -24,16 +24,19 @@
   .shop{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
   .shop .card{background:rgba(255,255,255,0.03);padding:8px;border-radius:6px}
   .col{display:flex;flex-direction:column;gap:6px}
-  .skillsGrid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px}
-  .skillBtn{background:rgba(255,255,255,0.02);padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);cursor:pointer;font-size:0.8em}
+  .skillsGrid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin-top:8px}
+  .skillBtn{background:rgba(255,255,255,0.02);padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);cursor:pointer;font-size:0.8em;white-space:pre-line}
   .skillBtn.purchased{box-shadow:0 0 8px rgba(123,243,168,0.6);border-color:#7bf3a8}
-  .tune{display:flex;gap:8px;align-items:center}
+  .tabs{display:flex;gap:8px;margin:8px 0}
+  .tabBtn{padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.03);cursor:pointer}
+  .tabBtn.active{background:#7bf3a8;color:#003628}
+  .cardRow{display:flex;gap:8px;flex-wrap:wrap}
 </style>
 </head>
 <body>
   <div id="error" class="errorBanner"></div>
 
-  <h1>💰 放置ゲーム — Prestige & Infinity (Step1-3)</h1>
+  <h1>💰 放置ゲーム — Prestige & Infinity (Step4)</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
@@ -73,13 +76,16 @@
       <button id="speedInc" class="btn btn-small">+</button>
       <button id="pauseBtn" class="btn btn-small">一時停止</button>
     </div>
+  </div>
 
-    <div class="small" style="width:100%;margin-top:6px">プレステージ初回条件: 1e20（2回目以降は前回プレステージ時のスコアより上） — 昇天はLv上限到達で表示・実行可能</div>
+  <div class="tabs" role="tablist">
+    <button id="tabGen" class="tabBtn active">Generation</button>
+    <button id="tabInf" class="tabBtn">Infinity</button>
   </div>
 
   <div id="upgradeContainer"></div>
 
-  <div id="prestigeShop" class="shop"></div>
+  <div id="prestigeShop" class="shop" style="display:none"></div>
 
 <script>
 (function(){
@@ -134,7 +140,6 @@
 
     // --------------- constants & templates ---------------
     const INF_TARGET = BigNum.fromMantExp(1.8, 308); // 1.8e308
-    // NOTE: INF_START used previously; for meter we start mapping from 1 (10^0) so user sees meter from 0
     const PROGRESS_CAP = 1e9;
     let costBaseMultVar = 1.15;
 
@@ -172,6 +177,19 @@
     const genBaseCost = [1,3,10,30,100,300,1000,3000,10000,30000];
     const genCostScale = 1.5;
 
+    // Mines (new in Step4)
+    let minesCount = 0;
+    const minesBaseCost = 5;
+    const minesCostScale = 2.0;
+
+    // Infinity Challenges
+    const INF_CHALLENGE_STORAGE = 'idle_inf_challenges_v1';
+    const infinityChallenges = [
+      { id:'C1', name:'厳格な節約', desc:'開始時に収入がリセットされます。報酬: softcap を弱める（+0.5 設定）', reqIP:0, active:false, reward:{type:'softcapDelta', value:-10} },
+      { id:'C2', name:'発電制限', desc:'開始時にアップグレード効果が -50% (challenge 制約)、報酬: ジェネ効率 ×1.5', reqIP:0, active:false, reward:{type:'genEffMult', value:1.5} },
+      { id:'C3', name:'ノーヘルプ', desc:'Prestige 効果を無効化する制約、報酬: final income ×2', reqIP:0, active:false, reward:{type:'finalMult', value:2} }
+    ];
+
     let speedMultiplier = 1.0; // 1..3
     let paused = false;
 
@@ -185,19 +203,15 @@
     let softCapStrength = 0.01; // small = gentler softcap; larger => stronger suppression
     // ------------------------------------------------------------
 
-    // -------------------------
-    // SkillNodes (50 nodes) -- define early to avoid reference-before-definition
-    // -------------------------
+    // SkillNodes (50 nodes)
     const SKILL_STORAGE_KEY = 'idle_skill_nodes_v1';
-    // generate 50 nodes programmatically with diverse concrete effects
     const skillNodes = new Array(50).fill(0).map((_,i)=>{
-      // vary effects among a set
       const effects = [
-        {type:'mAdd', value:0.01},             // small additive to per-upgrade multiplier
-        {type:'rMul', value:1.02},             // multiplicative to per-upgrade rate
-        {type:'costMul', value:0.95},          // reduce cost
-        {type:'baseIncome', value:1.05},       // multiply baseIncome
-        {type:'genEff', value:1.10},           // multiply generator efficiency
+        {type:'mAdd', value:0.01},
+        {type:'rMul', value:1.02},
+        {type:'costMul', value:0.95},
+        {type:'baseIncome', value:1.05},
+        {type:'genEff', value:1.10},
       ];
       const eff = effects[i % effects.length];
       return {
@@ -205,106 +219,9 @@
         name: (i+1) + '. ' + (eff.type === 'mAdd' ? '微増M' : eff.type === 'rMul' ? '速度+' : eff.type === 'costMul' ? 'コスト減' : eff.type === 'baseIncome' ? '基礎収入+' : 'ジェネ効率+'),
         effect: eff,
         purchased: false,
-        cost: Math.ceil(2 + Math.pow(1.18, i)) // modest scaling cost (prestigePoints)
+        cost: Math.ceil(2 + Math.pow(1.18, i))
       };
     });
-
-    function loadSkillNodes(){
-      try {
-        const raw = localStorage.getItem(SKILL_STORAGE_KEY);
-        if (!raw) return;
-        const arr = JSON.parse(raw);
-        if (!Array.isArray(arr) || arr.length !== skillNodes.length) return;
-        for (let i=0;i<skillNodes.length;i++){
-          skillNodes[i].purchased = !!arr[i].purchased;
-        }
-      } catch(e){ console.warn('loadSkillNodes fail', e); }
-    }
-    function saveSkillNodes(){
-      try {
-        const arr = skillNodes.map(s => ({id:s.id, purchased: !!s.purchased}));
-        localStorage.setItem(SKILL_STORAGE_KEY, JSON.stringify(arr));
-      } catch(e){ console.warn('saveSkillNodes fail', e); }
-    }
-    function applySkillEffects(){
-      // reset to base, then apply every purchased node exactly once
-      Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
-      // reset baseIncome to base 1 times current prestigeMult? We treat baseIncome as base number; we'll keep baseIncomeBase separately
-      // For simplicity we'll store original base income baseline here:
-      let baseIncomeBase = BigNum.fromNumber(1);
-      baseIncome = baseIncomeBase.clone();
-
-      // generatorPoints unaffected here; gen efficiency to be applied in relevant places (we store local multiplier)
-      let genEffMultiplier = 1.0;
-
-      for (let i=0;i<skillNodes.length;i++){
-        const s = skillNodes[i];
-        if (!s.purchased) continue;
-        const eff = s.effect;
-        switch(eff.type){
-          case 'mAdd':
-            globalPrestige.mAdd += eff.value;
-            break;
-          case 'rMul':
-            globalPrestige.rMul *= eff.value;
-            break;
-          case 'costMul':
-            globalPrestige.costMul *= eff.value;
-            break;
-          case 'baseIncome':
-            baseIncome.mulByNumber(eff.value);
-            break;
-          case 'genEff':
-            genEffMultiplier *= eff.value;
-            break;
-        }
-      }
-      // apply genEffMultiplier to generator behavior: store into a variable used by generator simulation
-      window.__genEffMultiplier = genEffMultiplier;
-    }
-
-    function initSkillUI(){
-      // insert skill UI into prestigeShop
-      const shop = document.getElementById('prestigeShop');
-      if (!shop) return;
-      // create skill area container
-      const existing = document.getElementById('skillArea');
-      if (existing) existing.remove();
-      const skillCard = document.createElement('div');
-      skillCard.id = 'skillArea';
-      skillCard.className = 'card col';
-      skillCard.innerHTML = `<div><strong>無限スキルツリー（Skill Nodes）</strong></div><div class="small">タップして詳細・購入（Cost = prestige points）</div>`;
-      const grid = document.createElement('div');
-      grid.className = 'skillsGrid';
-      skillNodes.forEach((s, idx) => {
-        const btn = document.createElement('button');
-        btn.className = 'skillBtn' + (s.purchased ? ' purchased' : '');
-        btn.id = 'skillBtn_' + idx;
-        btn.textContent = s.name + '\n(' + s.cost + ')';
-        btn.addEventListener('click', ()=>{
-          const detail = `ID:${s.id}\n${s.name}\nEffect: ${s.effect.type} × ${s.effect.value}\nCost: ${s.cost} pts\nPurchased: ${s.purchased ? 'Yes' : 'No'}`;
-          if (s.purchased){
-            alert(detail);
-            return;
-          }
-          if (confirm(detail + '\n\n購入しますか？（プレステージポイントを消費）')){
-            if (prestigePoints >= s.cost){
-              prestigePoints -= s.cost;
-              s.purchased = true;
-              saveSkillNodes();
-              applySkillEffects();
-              saveGame();
-              updateUI_throttled(true);
-              initSkillUI();
-              alert('購入しました: ' + s.name);
-            } else alert('プレステージポイントが足りません');
-          }
-        });
-        grid.appendChild(btn);
-      });
-      skillCard.appendChild(grid);
-      shop.appendChild(skillCard);
-    }
 
     // helpers
     function fmtSmall(n){
@@ -357,7 +274,47 @@
       return c;
     }
 
-    // UI init
+    // --------- Skill load/save/apply ----------
+    function loadSkillNodes(){
+      try {
+        const raw = localStorage.getItem(SKILL_STORAGE_KEY);
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr) || arr.length !== skillNodes.length) return;
+        for (let i=0;i<skillNodes.length;i++){
+          skillNodes[i].purchased = !!arr[i].purchased;
+        }
+      } catch(e){ console.warn('loadSkillNodes fail', e); }
+    }
+    function saveSkillNodes(){
+      try {
+        const arr = skillNodes.map(s => ({id:s.id, purchased: !!s.purchased}));
+        localStorage.setItem(SKILL_STORAGE_KEY, JSON.stringify(arr));
+      } catch(e){ console.warn('saveSkillNodes fail', e); }
+    }
+    function applySkillEffects(){
+      Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
+      let baseIncomeBase = BigNum.fromNumber(1);
+      baseIncome = baseIncomeBase.clone();
+      let genEffMultiplier = 1.0;
+      for (let i=0;i<skillNodes.length;i++){
+        const s = skillNodes[i];
+        if (!s.purchased) continue;
+        const eff = s.effect;
+        switch(eff.type){
+          case 'mAdd': globalPrestige.mAdd += eff.value; break;
+          case 'rMul': globalPrestige.rMul *= eff.value; break;
+          case 'costMul': globalPrestige.costMul *= eff.value; break;
+          case 'baseIncome': baseIncome.mulByNumber(eff.value); break;
+          case 'genEff': genEffMultiplier *= eff.value; break;
+        }
+      }
+      // mines also affect gen eff; base from skills stored here; full multiplier computed below
+      window.__genEffBaseFromSkills = genEffMultiplier;
+      window.__genEffMultiplier = genEffMultiplier * (1 + minesCount * 0.05);
+    }
+
+    // --------- UI init ----------
     function initUI(){
       const container = document.getElementById('upgradeContainer');
       container.innerHTML = '';
@@ -409,14 +366,12 @@
       currProgress = new Array(upgrades.length).fill(0);
       for (let i=0;i<upgrades.length;i++){ prevProgress[i] = upgrades[i].progress || 0; currProgress[i] = upgrades[i].progress || 0; }
 
-      // skill UI must be rendered inside prestigeShop
-      initSkillUI();
+      // skill UI and prestige shop will be rendered by renderPrestigeShop
       renderPrestigeShop();
     }
 
     // ---- New: softCap & prestige boost functions ----
     function softCapMultiplierForScore(bn){
-      // returns a JS Number multiplier <= 1 (BigNum multiplication of income will use this)
       const logVal = bigNumLog10(bn);
       if (!isFinite(logVal)) return 1;
       if (logVal <= softCapStartLog) return 1;
@@ -427,7 +382,6 @@
     }
 
     function prestigeBoostMultiplier(){
-      // multiplier = exp(0.01 * sqrt(prestigePoints))
       const pp = Number(prestigePoints) || 0;
       if (pp <= 0) return 1;
       const exponent = 0.01 * Math.sqrt(pp);
@@ -437,12 +391,11 @@
       return mult;
     }
 
-    // map Infinity progress from money >=1 to INF_TARGET (so meter starts from 0)
     function computeInfinityProgressPercent(bn){
       if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
       if (bn.m === 0) return 0;
       const logVal = bigNumLog10(bn);
-      const logStart = 0; // 10^0 == 1 -> start counting from 1
+      const logStart = 0; // 10^0 == 1 -> meter starts at 1
       const logTarget = bigNumLog10(INF_TARGET);
       if (!isFinite(logVal)) return 0;
       if (logVal < logStart) return 0;
@@ -479,8 +432,7 @@
       const prestigeMultNum = prestigeBoostMultiplier();
       rateBN.mulByNumber(prestigeMultNum);
 
-      // Decide whether to display as JS number or BigNum string
-      // If total multiplier has grown large (> e16) -> show BigNum
+      // decide display
       const totalLog = bigNumLog10(totalMultBN);
       const rateDisplayNum = rateBN.toNumberSafe();
       const rateEl = document.getElementById('rate');
@@ -490,7 +442,7 @@
         rateEl.textContent = isFinite(rateDisplayNum) ? rateDisplayNum.toFixed(2) : rateBN.toString();
       }
 
-      // show formula (human readable summary)
+      // formula
       let formulaParts = upgrades.map(u=>{
         const n = (u._multBN && u._multBN.toNumberSafe && isFinite(u._multBN.toNumberSafe())) ? u._multBN.toNumberSafe() : 0;
         const part = 1 + n + 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0) + (globalPrestige.mAdd || 0);
@@ -543,6 +495,7 @@
 
       document.getElementById('inftyPoints').textContent = String(infinityPoints);
 
+      // refresh prestige shop (safe: it clears and rebuilds)
       renderPrestigeShop();
     }
 
@@ -567,7 +520,7 @@
 
     function getMultiplierIncrementBig(u){
       const base = 0.005 * Math.pow(1 + u.level, 0.38);
-      const genFactor = 1 + ((window.__genEffMultiplier || 1) - 1) + (generatorPoints || 0) * 0.1;
+      const genFactor = 1 + ((window.__genEffBaseFromSkills || 1) - 1) + (generatorPoints || 0) * 0.1;
       return BigNum.fromNumber(Math.min(base * genFactor, 1e12));
     }
 
@@ -697,7 +650,7 @@
     function fullReset(){
       try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
       try { localStorage.removeItem(SKILL_STORAGE_KEY); } catch(e){}
-      // reset everything
+      try { localStorage.removeItem(INF_CHALLENGE_STORAGE); } catch(e){}
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -711,12 +664,13 @@
       Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
       generatorPoints = 0;
       generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
+      minesCount = 0;
+      infinityChallenges.forEach(c => c.active = false);
       speedMultiplier = 1.0;
       paused = false;
       displayMoneyNum = 0;
       prevProgress = new Array(upgrades.length).fill(0);
       currProgress = new Array(upgrades.length).fill(0);
-      // reset skill nodes
       skillNodes.forEach(s => s.purchased = false);
       saveSkillNodes();
       initUI();
@@ -747,7 +701,9 @@
           generatorPoints,
           generators,
           softCapStartLog,
-          softCapStrength
+          softCapStrength,
+          minesCount,
+          challenges: infinityChallenges.map(c => ({id:c.id, active:c.active}))
         };
         localStorage.setItem('idle_all_big_save', JSON.stringify(save));
         saveSkillNodes();
@@ -803,17 +759,23 @@
         if (typeof data.softCapStartLog === 'number') softCapStartLog = data.softCapStartLog;
         if (typeof data.softCapStrength === 'number') softCapStrength = data.softCapStrength;
 
+        if (typeof data.minesCount === 'number') minesCount = data.minesCount;
+
+        if (Array.isArray(data.challenges)){
+          data.challenges.forEach(sc => {
+            const c = infinityChallenges.find(x => x.id === sc.id);
+            if (c) c.active = !!sc.active;
+          });
+        }
+
         sanitizeUpgrades(upgrades);
       } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
 
-    // simulation + render
+    // --------- Simulation & render ----------
     sanitizeUpgrades(upgrades);
-    // load saves (upgrades + money)
     loadGame();
-    // load skill nodes BEFORE applying effects / UI
     loadSkillNodes();
-    // apply skill effects (skillNodes may modify baseIncome/globalPrestige)
     applySkillEffects();
     sanitizeUpgrades(upgrades);
     initUI();
@@ -867,7 +829,6 @@
         u.progress = currProgress[i];
       }
 
-      // compute total multiplier (BigNum), then compute addBN = baseIncome * totalMult * dt * s * softCap
       let totalMultBN = BigNum.fromNumber(1);
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i];
@@ -882,23 +843,23 @@
       const addBN = baseIncome.clone();
       addBN.mulInPlace(totalMultBN);
 
-      // apply prestige boost to per-second income as specified (exponential smooth)
       const prestigeMultNum = prestigeBoostMultiplier();
       addBN.mulByNumber(prestigeMultNum);
 
-      // apply softcap multiplier (based on total money)
+      // apply challenge rewards that affect final income (if any)
+      infinityChallenges.forEach(c => {
+        if (!c.active) return;
+        if (c.reward.type === 'finalMult') addBN.mulByNumber(c.reward.value);
+      });
+
       const softMult = softCapMultiplierForScore(money);
       addBN.mulByNumber(softMult);
 
-      // time & speed factor
       addBN.mulByNumber(dt * s);
 
       money.addInPlace(addBN);
 
-      // clamp money to INF_TARGET if it reaches or exceeds it to avoid overflow and accidental resets
-      if (money.gteBig(INF_TARGET)) {
-        money = INF_TARGET.clone();
-      }
+      if (money.gteBig(INF_TARGET)) { money = INF_TARGET.clone(); }
 
       simulateGenerators(dt);
     }
@@ -924,7 +885,6 @@
 
       const alpha = FIXED_DT === 0 ? 0 : (accumulator / FIXED_DT);
 
-      // money display: if very large rely on BigNum.toString
       if (money.m === 0){
         displayMoneyNum += (0 - displayMoneyNum) * 0.12;
         document.getElementById('money').textContent = fmtSmall(displayMoneyNum);
@@ -1017,7 +977,7 @@
 
     updateSpeedUI(true);
 
-    // ===== Prestige + Infinity shop UI & logic =====
+    // ===== Infinity (Prestige) UI & logic (reworked to avoid duplication) =====
     function genCostForPurchase(tier, qty){
       const base = genBaseCost[tier];
       let total = 0;
@@ -1027,7 +987,6 @@
       }
       return total;
     }
-
     function buyGenerator(tier, qty){
       qty = Number(qty) || 1;
       if (qty <= 0) return;
@@ -1040,25 +999,154 @@
       alert(`G${tier+1} を ${qty} 個購入しました（IP -${cost}）`);
     }
 
+    // Mines
+    function mineCost(qty){
+      let total = 0;
+      let cur = minesCount;
+      for (let i=0;i<qty;i++){
+        total += Math.ceil(minesBaseCost * Math.pow(minesCostScale, cur + i));
+      }
+      return total;
+    }
+    function buyMine(qty){
+      qty = Number(qty) || 1;
+      if (qty <= 0) return;
+      const cost = mineCost(qty);
+      if (infinityPoints < cost){ alert('IPが足りません'); return; }
+      infinityPoints -= cost;
+      minesCount += qty;
+      // update gen eff multiplier
+      window.__genEffMultiplier = (window.__genEffBaseFromSkills || 1) * (1 + minesCount * 0.05);
+      saveGame();
+      updateUI_throttled(true);
+      alert(`Mine を ${qty} 個購入しました（IP -${cost}）`);
+    }
+
+    // Challenges
+    function loadChallenges(){
+      try {
+        const raw = localStorage.getItem(INF_CHALLENGE_STORAGE);
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return;
+        arr.forEach(a => {
+          const c = infinityChallenges.find(x => x.id === a.id);
+          if (c) c.active = !!a.active;
+        });
+      } catch(e){ console.warn('loadChallenges fail', e); }
+    }
+    function saveChallenges(){
+      try {
+        localStorage.setItem(INF_CHALLENGE_STORAGE, JSON.stringify(infinityChallenges.map(c => ({id:c.id, active:c.active}))));
+      } catch(e){ console.warn('saveChallenges fail', e); }
+    }
+    function startChallenge(id){
+      // only one active at a time
+      if (infinityChallenges.some(c=>c.active)) { alert('既にチャレンジがアクティブです。まずは解除してください。'); return; }
+      const c = infinityChallenges.find(x=>x.id===id);
+      if (!c) return;
+      if (infinityPoints < c.reqIP){ alert('必要なIPがありません'); return; }
+      if (!confirm(`${c.name} を開始しますか？\n効果: ${c.desc}\n開始するとGenerationがリセットされます。`)) return;
+      // apply: set active, reset generation
+      c.active = true;
+      // reset generation-like gainInfinity but keep IP/mines/skill nodes
+      money = BigNum.zero();
+      baseIncome = BigNum.fromNumber(1);
+      upgrades = cloneTemplate();
+      sanitizeUpgrades(upgrades);
+      prestigePoints = 0;
+      prestigeCount = 0;
+      lastPrestigeScore = BigNum.zero();
+      // apply skill/mine base
+      applySkillEffects();
+      window.__genEffMultiplier = (window.__genEffBaseFromSkills || 1) * (1 + minesCount * 0.05);
+      saveChallenges();
+      saveGame();
+      initUI();
+      updateUI_throttled(true);
+      alert('チャレンジ開始: ' + c.name);
+    }
+    function stopChallenge(id){
+      const c = infinityChallenges.find(x=>x.id===id);
+      if (!c) return;
+      if (!c.active) return;
+      if (!confirm(`${c.name} を終了しますか？（チャレンジ状態を解除します）`)) return;
+      c.active = false;
+      saveChallenges();
+      saveGame();
+      updateUI_throttled(true);
+      alert('チャレンジを解除しました: ' + c.name);
+    }
+
+    // Skill UI (placed in prestigeShop)
+    function initSkillUI(shop){
+      // remove previous skill area if present
+      const prev = shop.querySelector('#skillArea');
+      if (prev) prev.remove();
+      const skillCard = document.createElement('div');
+      skillCard.id = 'skillArea';
+      skillCard.className = 'card col';
+      skillCard.innerHTML = `<div><strong>無限スキルツリー（Skill Nodes）</strong></div><div class="small">タップして詳細・購入（Cost = prestige points）</div>`;
+      const grid = document.createElement('div');
+      grid.className = 'skillsGrid';
+      skillNodes.forEach((s, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'skillBtn' + (s.purchased ? ' purchased' : '');
+        btn.id = 'skillBtn_' + idx;
+        btn.textContent = s.name + '\n(' + s.cost + ')';
+        btn.addEventListener('click', ()=>{
+          const detail = `ID:${s.id}\n${s.name}\nEffect: ${s.effect.type} × ${s.effect.value}\nCost: ${s.cost} pts\nPurchased: ${s.purchased ? 'Yes' : 'No'}`;
+          if (s.purchased){
+            alert(detail);
+            return;
+          }
+          if (confirm(detail + '\n\n購入しますか？（プレステージポイントを消費）')){
+            if (prestigePoints >= s.cost){
+              prestigePoints -= s.cost;
+              s.purchased = true;
+              saveSkillNodes();
+              applySkillEffects();
+              saveGame();
+              updateUI_throttled(true);
+              initSkillUI(shop);
+              alert('購入しました: ' + s.name);
+            } else alert('プレステージポイントが足りません');
+          }
+        });
+        grid.appendChild(btn);
+      });
+      skillCard.appendChild(grid);
+      shop.appendChild(skillCard);
+    }
+
+    // ---------- IMPORTANT: renderPrestigeShop now clears and rebuilds the entire shop ----------
     function renderPrestigeShop(){
       const shop = document.getElementById('prestigeShop');
       if (!shop) return;
-      // keep existing content, clear and re-add
-      // note: skill area is handled in initSkillUI
-      // but we also add tuning controls here
-      const existing = shop.querySelector('.tuneArea');
-      if (existing) existing.remove();
+      // Clear to avoid duplication (fix for infinite generator UI bug)
+      shop.innerHTML = '';
+
+      // skill area
+      initSkillUI(shop);
+
+      // tuning controls
       const tune = document.createElement('div');
-      tune.className = 'card tuneArea';
+      tune.className = 'card';
       tune.innerHTML = `<div><strong>Softcap チューニング</strong></div>
-        <div class="small tune">Start log10: <input id="softStart" type="number" style="width:80px" value="${softCapStartLog}"> Strength: <input id="softStr" type="number" step="0.001" style="width:80px" value="${softCapStrength}"> <button id="applySoft" class="btn btn-small">適用</button></div>
+        <div class="small">Start log10: <input id="softStart" type="number" style="width:80px" value="${softCapStartLog}"> Strength: <input id="softStr" type="number" step="0.001" style="width:80px" value="${softCapStrength}"> <button id="applySoft" class="btn btn-small">適用</button></div>
         <div class="small">※ softcapStart を上げる / strength を下げると e150 などでの頭打ちを緩和できます。</div>`;
       shop.appendChild(tune);
-      document.getElementById('softStart').addEventListener('change', (e)=> { softCapStartLog = Number(e.target.value) || softCapStartLog; saveGame(); updateUI_throttled(true); });
-      document.getElementById('softStr').addEventListener('change', (e)=> { softCapStrength = Number(e.target.value) || softCapStrength; saveGame(); updateUI_throttled(true); });
-      document.getElementById('applySoft').addEventListener('click', ()=> { saveGame(); updateUI_throttled(true); alert('softcap 設定を保存しました'); });
+      // apply events (use delegation-safe rebind)
+      setTimeout(()=>{
+        const softStartEl = document.getElementById('softStart');
+        const softStrEl = document.getElementById('softStr');
+        const applySoft = document.getElementById('applySoft');
+        if (softStartEl) softStartEl.addEventListener('change', (e)=> { softCapStartLog = Number(e.target.value) || softCapStartLog; saveGame(); updateUI_throttled(true); });
+        if (softStrEl) softStrEl.addEventListener('change', (e)=> { softCapStrength = Number(e.target.value) || softCapStrength; saveGame(); updateUI_throttled(true); });
+        if (applySoft) applySoft.addEventListener('click', ()=> { saveGame(); updateUI_throttled(true); alert('softcap 設定を保存しました'); });
+      },0);
 
-      // info + generators area appended after skill area
+      // prestige items
       const info = document.createElement('div'); info.className='card';
       info.innerHTML = `<div><strong>プレステージポイント: ${prestigePoints}</strong></div><div class="small">プレステージ回数: ${prestigeCount}</div>`;
       shop.appendChild(info);
@@ -1069,7 +1157,6 @@
         { id:'cost_dec', title:'全アップグレード コスト -10%', cost:4, apply(){ globalPrestige.costMul *= 0.90; } },
         { id:'costGrowth_down', title:'コスト成長率を-0.01', cost:6, apply(){ costBaseMultVar = Math.max(1.01, costBaseMultVar - 0.01); } },
       ];
-
       prestigeItems.forEach(item => {
         const card = document.createElement('div'); card.className='card';
         card.innerHTML = `<div><strong>${item.title}</strong></div><div class="small">Cost: ${item.cost} pts</div>`;
@@ -1087,10 +1174,12 @@
         shop.appendChild(card);
       });
 
+      // IP / GP info
       const ipCard = document.createElement('div'); ipCard.className='card';
       ipCard.innerHTML = `<div><strong>無限ポイント(IP): ${infinityPoints}</strong></div><div class="small">GP: ${generatorPoints.toFixed(4)}</div>`;
       shop.appendChild(ipCard);
 
+      // Generators
       const genContainer = document.createElement('div'); genContainer.className='card col';
       genContainer.innerHTML = `<div><strong>Generators (G1〜G10) — IPで購入</strong></div><div class="small">G1はGPを生成。G2..G10は下位ジェネレーターを増やします。</div>`;
       for (let t=0;t<10;t++){
@@ -1108,9 +1197,39 @@
         genContainer.appendChild(line);
       }
       shop.appendChild(genContainer);
+
+      // Mines UI
+      const mineCard = document.createElement('div'); mineCard.className='card';
+      mineCard.innerHTML = `<div><strong>Mines</strong> — 所持: <span id="mineCount">${minesCount}</span></div>
+        <div class="small">Mine はジェネレーター効率を +5%（累積）します。次のコスト: <span id="mineNextCost">${Math.ceil(minesBaseCost * Math.pow(minesCostScale, minesCount))}</span> IP</div>
+        <div style="margin-top:6px"><button id="buyMine1" class="btn btn-small">Buy ×1</button> <button id="buyMine5" class="btn btn-small">Buy ×5</button></div>`;
+      shop.appendChild(mineCard);
+      setTimeout(()=>{
+        const b1 = document.getElementById('buyMine1');
+        const b5 = document.getElementById('buyMine5');
+        if (b1) b1.addEventListener('click', ()=> buyMine(1));
+        if (b5) b5.addEventListener('click', ()=> buyMine(5));
+      },0);
+
+      // Challenges UI
+      const chCard = document.createElement('div'); chCard.className='card col';
+      chCard.innerHTML = `<div><strong>Infinity チャレンジ</strong></div><div class="small">1つだけ同時にアクティブにできます（開始で Generation リセット）。</div>`;
+      infinityChallenges.forEach(c => {
+        const line = document.createElement('div');
+        line.style.display='flex'; line.style.gap='8px'; line.style.alignItems='center'; line.style.marginTop='6px';
+        line.innerHTML = `<div style="flex:1"><strong>${c.name}</strong> — ${c.desc}</div><div class="small">Req IP: ${c.reqIP}</div>`;
+        const btn = document.createElement('button'); btn.className='btn btn-small';
+        btn.textContent = c.active ? '停止' : '開始';
+        btn.addEventListener('click', ()=> {
+          if (c.active) stopChallenge(c.id); else startChallenge(c.id);
+        });
+        line.appendChild(btn);
+        chCard.appendChild(line);
+      });
+      shop.appendChild(chCard);
     }
 
-    // Debug support (kept)
+    // Debug support
     (function() {
       const params = window.location.search;
       const match = params.match(/\?=(.+)/);
@@ -1159,6 +1278,34 @@
           alert("不明なデバッグコマンド: " + command);
       }
     })();
+
+    // ---------------- Tabs handling ----------------
+    const tabGen = document.getElementById('tabGen');
+    const tabInf = document.getElementById('tabInf');
+    const upgradeEl = document.getElementById('upgradeContainer');
+    const shopEl = document.getElementById('prestigeShop');
+    function showTab(t){
+      if (t === 'gen'){
+        tabGen.classList.add('active');
+        tabInf.classList.remove('active');
+        upgradeEl.style.display = '';
+        shopEl.style.display = 'none';
+      } else {
+        tabGen.classList.remove('active');
+        tabInf.classList.add('active');
+        upgradeEl.style.display = 'none';
+        shopEl.style.display = '';
+      }
+    }
+    tabGen.addEventListener('click', ()=> showTab('gen'));
+    tabInf.addEventListener('click', ()=> showTab('inf'));
+    // default: Generation
+    showTab('gen');
+
+    // ensure challenge/load state applied
+    loadChallenges();
+    applySkillEffects();
+    window.__genEffMultiplier = (window.__genEffBaseFromSkills || 1) * (1 + minesCount * 0.05);
 
   } catch(err){
     showError(err && err.message ? err.message : String(err));
