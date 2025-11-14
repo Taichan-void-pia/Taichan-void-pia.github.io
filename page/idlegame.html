@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — Prestige & Infinity (Step4 修正版)</title>
+<title>Idle — Prestige & Infinity (Step4 → 改訂)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
@@ -35,8 +35,7 @@
 </head>
 <body>
   <div id="error" class="errorBanner"></div>
-
-  <h1>💰 放置ゲーム — Prestige & Infinity (Step4)</h1>
+  <h1>💰 放置ゲーム — Prestige & Infinity (Step4 改訂)</h1>
 
   <div class="stats">
     所持金：<span id="money">0</span>　
@@ -50,6 +49,7 @@
       <span id="inftyPct" class="small" style="margin-left:8px">0%</span>
       <button id="gainInfinityBtn" class="btn btn-primary invisible" style="margin-left:10px">無限を得る</button>
       <span class="small" style="margin-left:8px">無限ポイント(IP): <span id="inftyPoints">0</span></span>
+      <span class="small" style="margin-left:8px">GDP: <span id="gdpDisp">0</span></span>
     </div>
   </div>
 
@@ -84,7 +84,6 @@
   </div>
 
   <div id="upgradeContainer"></div>
-
   <div id="prestigeShop" class="shop" style="display:none"></div>
 
 <script>
@@ -97,7 +96,7 @@
   }
 
   try {
-    // -------- BigNum (軽量) ----------
+    // ---------- BigNum ----------
     class BigNum {
       constructor(m=0,e=0){ this.m=m; this.e=e; this._normalize(); }
       static zero(){ return new BigNum(0,0); }
@@ -136,6 +135,7 @@
       addNumber(n){ this.addInPlace(BigNum.fromNumber(n)); }
       gteNumber(n){ if (typeof n !== 'number') n = Number(n); if (!isFinite(n)) return false; if (n === 0) return this.m >= 0; const bn = BigNum.fromNumber(n); return this.gteBig(bn); }
       gteBig(b){ if (!(b instanceof BigNum)) b = BigNum.fromObject(b); if (this.m === 0 && b.m === 0) return true; if (this.e !== b.e) return this.e > b.e; return Math.abs(this.m) >= Math.abs(b.m); }
+      ltBig(b){ if (!(b instanceof BigNum)) b = BigNum.fromObject(b); if (this.m === 0 && b.m !== 0) return true; if (this.e !== b.e) return this.e < b.e; return Math.abs(this.m) < Math.abs(b.m); }
     }
 
     // --------------- constants & templates ---------------
@@ -161,70 +161,73 @@
     let money = BigNum.zero();
     let baseIncome = BigNum.fromNumber(1);
     let upgrades = cloneTemplate();
-    let prestigePoints = 0; // integer points user can spend in shop
+    let prestigePoints = 0;
     let prestigeCount = 0;
     let prestigeMult = BigNum.fromNumber(1);
     let lastPrestigeScore = BigNum.zero();
-    let infinityPoints = 0; // IP
+    // Infinity Points as BigNum (use IP for skill purchases / generators / mines)
+    let infinityPoints = BigNum.zero();
 
-    // global prestige bonuses (purchased with prestigePoints)
+    // global prestige bonuses
     const baseGlobalPrestige = { mAdd: 0, rMul: 1.0, costMul: 1.0 };
     const globalPrestige = Object.assign({}, baseGlobalPrestige);
 
-    // --- Infinity / Generators (Step4) ---
-    let generatorPoints = 0; // GP
-    let generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
-    const genBaseCost = [1,3,10,30,100,300,1000,3000,10000,30000];
-    const genCostScale = 1.5;
+    // Infinity / Generators
+    let generatorPoints = 0; // number GP
+    // generators is dynamic (infinite tiers). initial tiers created.
+    let generators = [];
+    const INITIAL_TIERS = 8;
+    const genBaseCostBase = 2; // base multiplier for cost formula
+    let genCostScale = 2.5; // steeper growth per your request
+    // gp penalty base (affects generator efficiency). Can be reduced by skill nodes.
+    let gpPenaltyFactorBase = 0.08;
+    let gpPenaltyReductionFromSkills = 0;
 
-    // Mines (new in Step4)
+    // Mines + GDP
     let minesCount = 0;
-    const minesBaseCost = 5;
-    const minesCostScale = 2.0;
+    let gdp = BigNum.zero(); // Golden Particles
+    const gdpPerMinePerSec = 0.5; // per mine per sec
+    // cost scale for mines (in IP)
+    const minesBaseIP = 5;
+    const minesIPScale = 2.0;
 
-    // Infinity Challenges
-    const INF_CHALLENGE_STORAGE = 'idle_inf_challenges_v1';
-    const infinityChallenges = [
-      { id:'C1', name:'厳格な節約', desc:'開始時に収入がリセットされます。報酬: softcap を弱める（+0.5 設定）', reqIP:0, active:false, reward:{type:'softcapDelta', value:-10} },
-      { id:'C2', name:'発電制限', desc:'開始時にアップグレード効果が -50% (challenge 制約)、報酬: ジェネ効率 ×1.5', reqIP:0, active:false, reward:{type:'genEffMult', value:1.5} },
-      { id:'C3', name:'ノーヘルプ', desc:'Prestige 効果を無効化する制約、報酬: final income ×2', reqIP:0, active:false, reward:{type:'finalMult', value:2} }
-    ];
+    // SkillNodes (50 nodes purchasable with IP sequentially)
+    const SKILL_STORAGE_KEY = 'idle_skill_nodes_v2';
+    const SKILL_COUNT = 50;
+    const skillNodes = new Array(SKILL_COUNT).fill(0).map((_,i)=>{
+      // round costs (IP) increase
+      const cost = Math.ceil(1 + Math.pow(1.2, i)); // modest growth; tuneable
+      const types = ['ipMultAdd','genEff','gpPenaltyReduce','finalInc','mineBonus'];
+      const t = types[i % types.length];
+      let effect;
+      switch(t){
+        case 'ipMultAdd': effect = {type:'ipMultAdd', value:2}; break;
+        case 'genEff': effect = {type:'genEff', value:1.10}; break;
+        case 'gpPenaltyReduce': effect = {type:'gpPenaltyReduce', value:0.01}; break;
+        case 'finalInc': effect = {type:'finalInc', value:1.05}; break;
+        case 'mineBonus': effect = {type:'mineBonus', value:0.05}; break;
+      }
+      return { id:'S'+(i+1), name:'Skill '+(i+1), effect, purchased:false, cost };
+    });
 
-    let speedMultiplier = 1.0; // 1..3
-    let paused = false;
-
-    let displayMoneyNum = 0;
-    let prevProgress = [];
-    let currProgress = [];
-    const upgradeUI = [];
-
-    // ----- softcap / prestige tuning parameters (調整可能) -----
-    let softCapStartLog = 150; // softCap start at 10^150 (log10)
-    let softCapStrength = 0.01; // small = gentler softcap; larger => stronger suppression
-    // ------------------------------------------------------------
-
-    // SkillNodes (50 nodes)
-    const SKILL_STORAGE_KEY = 'idle_skill_nodes_v1';
-    const skillNodes = new Array(50).fill(0).map((_,i)=>{
-      const effects = [
-        {type:'mAdd', value:0.01},
-        {type:'rMul', value:1.02},
-        {type:'costMul', value:0.95},
-        {type:'baseIncome', value:1.05},
-        {type:'genEff', value:1.10},
-      ];
-      const eff = effects[i % effects.length];
+    // Infinity Challenges (9)
+    const INF_CHALLENGE_STORAGE = 'idle_inf_challenges_v2';
+    const infinityChallenges = new Array(9).fill(0).map((_,i)=>{
       return {
-        id: 'S' + (i+1),
-        name: (i+1) + '. ' + (eff.type === 'mAdd' ? '微増M' : eff.type === 'rMul' ? '速度+' : eff.type === 'costMul' ? 'コスト減' : eff.type === 'baseIncome' ? '基礎収入+' : 'ジェネ効率+'),
-        effect: eff,
-        purchased: false,
-        cost: Math.ceil(2 + Math.pow(1.18, i))
+        id: 'C' + (i+1),
+        name: 'Challenge ' + (i+1),
+        desc: '制約 ' + (i+1),
+        reqIP: 0,
+        active: false,
+        completed: false,
+        // reward objects simplified: some will give IP multiplier indirectly (we use completed count)
+        reward: {type:'misc', value:1}
       };
     });
 
-    // helpers
+    // UI / simulation helpers
     function fmtSmall(n){
+      if (n instanceof BigNum) return n.toString();
       if (typeof n === 'number'){
         if (!isFinite(n)) return "Infinity";
         if (Math.abs(n) >= 1e15) return n.toExponential(2);
@@ -234,13 +237,13 @@
       }
       return String(n);
     }
-
     function bigNumLog10(bn){
       if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
       if (bn.m === 0) return -Infinity;
       return bn.e + Math.log10(Math.abs(bn.m));
     }
 
+    // sanitize upgrades
     function sanitizeUpgrades(list){
       for (let i=0;i<list.length;i++){
         const u = list[i];
@@ -259,10 +262,7 @@
       }
     }
 
-    function getLevelCap(u){
-      return 100 + (u.ascendCount || 0) * 10;
-    }
-
+    function getLevelCap(u){ return 100 + (u.ascendCount || 0) * 10; }
     function getUpgradeCostBig(u, extraLevelOffset=0){
       const level = (u.level + extraLevelOffset);
       const factor = Math.pow(costBaseMultVar, Math.max(0, level));
@@ -270,20 +270,33 @@
       c.mulByNumber(factor);
       const penalty = 1 + (u.purchasePenalty || 0);
       c.mulByNumber(penalty);
-      c.mulByNumber(globalPrestige.costMul);
+      c.mulByNumber(globalPrestige.costMul || 1);
       return c;
     }
 
-    // --------- Skill load/save/apply ----------
+    // initialize generators dynamic list
+    function ensureInitialGenerators(){
+      while (generators.length < INITIAL_TIERS){
+        generators.push({count:0, progress:0});
+      }
+    }
+    ensureInitialGenerators();
+
+    // GP penalty factor applied to generator efficiency
+    function computeGPPenaltyFactor(){
+      // penalty = 1 / (1 + GP * (gpPenaltyFactorBase - reductions))
+      const base = Math.max(0.001, gpPenaltyFactorBase - gpPenaltyReductionFromSkills);
+      return 1 / (1 + generatorPoints * base);
+    }
+
+    // save/load skill nodes
     function loadSkillNodes(){
       try {
         const raw = localStorage.getItem(SKILL_STORAGE_KEY);
         if (!raw) return;
         const arr = JSON.parse(raw);
         if (!Array.isArray(arr) || arr.length !== skillNodes.length) return;
-        for (let i=0;i<skillNodes.length;i++){
-          skillNodes[i].purchased = !!arr[i].purchased;
-        }
+        for (let i=0;i<skillNodes.length;i++) skillNodes[i].purchased = !!arr[i].purchased;
       } catch(e){ console.warn('loadSkillNodes fail', e); }
     }
     function saveSkillNodes(){
@@ -292,29 +305,24 @@
         localStorage.setItem(SKILL_STORAGE_KEY, JSON.stringify(arr));
       } catch(e){ console.warn('saveSkillNodes fail', e); }
     }
+
+    // apply skill effects (affects gp penalty reduction, gen eff, mine bonus)
     function applySkillEffects(){
-      Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
-      let baseIncomeBase = BigNum.fromNumber(1);
-      baseIncome = baseIncomeBase.clone();
-      let genEffMultiplier = 1.0;
-      for (let i=0;i<skillNodes.length;i++){
-        const s = skillNodes[i];
-        if (!s.purchased) continue;
+      gpPenaltyReductionFromSkills = 0;
+      let extraGenEff = 1.0;
+      skillNodes.forEach(s=>{
+        if (!s.purchased) return;
         const eff = s.effect;
-        switch(eff.type){
-          case 'mAdd': globalPrestige.mAdd += eff.value; break;
-          case 'rMul': globalPrestige.rMul *= eff.value; break;
-          case 'costMul': globalPrestige.costMul *= eff.value; break;
-          case 'baseIncome': baseIncome.mulByNumber(eff.value); break;
-          case 'genEff': genEffMultiplier *= eff.value; break;
-        }
-      }
-      // mines also affect gen eff; base from skills stored here; full multiplier computed below
-      window.__genEffBaseFromSkills = genEffMultiplier;
-      window.__genEffMultiplier = genEffMultiplier * (1 + minesCount * 0.05);
+        if (eff.type === 'genEff') extraGenEff *= eff.value;
+        if (eff.type === 'gpPenaltyReduce') gpPenaltyReductionFromSkills += eff.value;
+      });
+      window.__genEffBaseFromSkills = extraGenEff;
+      // clamp
+      gpPenaltyReductionFromSkills = Math.min(0.6, gpPenaltyReductionFromSkills);
     }
 
-    // --------- UI init ----------
+    // UI init
+    const upgradeUI = [];
     function initUI(){
       const container = document.getElementById('upgradeContainer');
       container.innerHTML = '';
@@ -362,15 +370,12 @@
         upgradeUI[i].btnAsc.addEventListener('click', ()=> tryAscend(i));
       });
 
-      prevProgress = new Array(upgrades.length).fill(0);
-      currProgress = new Array(upgrades.length).fill(0);
-      for (let i=0;i<upgrades.length;i++){ prevProgress[i] = upgrades[i].progress || 0; currProgress[i] = upgrades[i].progress || 0; }
-
-      // skill UI and prestige shop will be rendered by renderPrestigeShop
-      renderPrestigeShop();
+      updateUI_throttled(true);
     }
 
-    // ---- New: softCap & prestige boost functions ----
+    // softcap only internal — UI removed per request
+    const softCapStartLog = 150;
+    const softCapStrength = 0.01;
     function softCapMultiplierForScore(bn){
       const logVal = bigNumLog10(bn);
       if (!isFinite(logVal)) return 1;
@@ -391,25 +396,18 @@
       return mult;
     }
 
-    function computeInfinityProgressPercent(bn){
-      if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
-      if (bn.m === 0) return 0;
-      const logVal = bigNumLog10(bn);
-      const logStart = 0; // 10^0 == 1 -> meter starts at 1
-      const logTarget = bigNumLog10(INF_TARGET);
-      if (!isFinite(logVal)) return 0;
-      if (logVal < logStart) return 0;
-      if (logVal >= logTarget) return 100;
-      const pct = (logVal - logStart) / (logTarget - logStart) * 100;
-      return Math.max(0, Math.min(100, pct));
+    // IP multiplier from completed challenges: 0 -> 1, n -> n*2 (so 1=>2, 9=>18)
+    function ipMultiplierFromChallenges(){
+      const completed = infinityChallenges.filter(c=>c.completed).length;
+      if (completed <= 0) return 1;
+      return completed * 2;
     }
-    // -------------------------------------------------
 
-    // throttled UI update
+    // update UI throttled
     let lastUI = 0;
     function updateUI_throttled(force){
       const now = performance.now();
-      if (!force && now - lastUI < 100) return;
+      if (!force && now - lastUI < 120) return;
       lastUI = now;
 
       // compute total multiplier using BigNum fully
@@ -424,31 +422,20 @@
         totalMultBN.mulInPlace(factorBN);
       }
 
-      // baseIncome * totalMult
       const rateBN = baseIncome.clone();
       rateBN.mulInPlace(totalMultBN);
-
-      // apply prestige boost (exponential) to final income
       const prestigeMultNum = prestigeBoostMultiplier();
       rateBN.mulByNumber(prestigeMultNum);
+      // challenge final multipliers (active)
+      const completed = infinityChallenges.filter(c=>c.completed).length;
+      if (completed > 0) rateBN.mulByNumber(1 + completed * 0.02);
 
-      // decide display
-      const totalLog = bigNumLog10(totalMultBN);
-      const rateDisplayNum = rateBN.toNumberSafe();
       const rateEl = document.getElementById('rate');
-      if ((isFinite(totalLog) && totalLog > 16) || (rateBN.e > 16) || !isFinite(rateDisplayNum)){
-        rateEl.textContent = rateBN.toString();
-      } else {
-        rateEl.textContent = isFinite(rateDisplayNum) ? rateDisplayNum.toFixed(2) : rateBN.toString();
-      }
+      const rateDisplayNum = rateBN.toNumberSafe();
+      if (!isFinite(rateDisplayNum) || rateBN.e > 16) rateEl.textContent = rateBN.toString();
+      else rateEl.textContent = isFinite(rateDisplayNum) ? rateDisplayNum.toFixed(2) : rateBN.toString();
 
-      // formula
-      let formulaParts = upgrades.map(u=>{
-        const n = (u._multBN && u._multBN.toNumberSafe && isFinite(u._multBN.toNumberSafe())) ? u._multBN.toNumberSafe() : 0;
-        const part = 1 + n + 0.02 * ((u.prestigeLevel&&u.prestigeLevel.mult)||0) + 0.05 * (u.ascendCount||0) + (globalPrestige.mAdd || 0);
-        return '(1+' + part.toFixed(3) + ')';
-      });
-      document.getElementById('formula').textContent = '収入 = baseIncome × ' + formulaParts.join(' × ') + ' × Prestige(exp)  （倍速: ' + speedMultiplier.toFixed(0) + (paused ? ' 停止中' : '') + '）';
+      document.getElementById('formula').textContent = '収入 = baseIncome × ... × Prestige(exp) （倍速: ' + speedMultiplier.toFixed(0) + (paused ? ' 停止中' : '') + '）';
 
       for (let i=0;i<upgrades.length;i++){
         const u = upgrades[i], ui = upgradeUI[i];
@@ -475,6 +462,7 @@
         ui.btnMax.disabled = !canBuy;
       }
 
+      // show prestige button when eligible
       const prestigeBtn = document.getElementById('prestigeBtn');
       let canPrestige = false;
       if (money.gteNumber(1e20)) {
@@ -485,17 +473,21 @@
       }
       if (canPrestige) prestigeBtn.classList.remove('invisible'); else prestigeBtn.classList.add('invisible');
 
+      // infinity meter / button
       const inftyFill = document.getElementById('inftyFill');
       const inftyBtn = document.getElementById('gainInfinityBtn');
       const pct = computeInfinityProgressPercent(money);
       inftyFill.style.transform = 'scaleX(' + (pct/100) + ')';
       const pctEl = document.getElementById('inftyPct');
       if (pctEl) pctEl.textContent = pct.toFixed(6) + '%';
-      if (money.gteBig(INF_TARGET)) inftyBtn.classList.remove('invisible'); else inftyBtn.classList.add('invisible');
+      // show gain button when >= target OR when Infinity Break active and money>target
+      if (money.gteBig(INF_TARGET) || (infinityChallenges.every(c=>c.completed) && money.gteBig(INF_TARGET))) inftyBtn.classList.remove('invisible'); else inftyBtn.classList.add('invisible');
 
-      document.getElementById('inftyPoints').textContent = String(infinityPoints);
+      // display IP, GDP
+      document.getElementById('inftyPoints').textContent = infinityPoints.toString();
+      document.getElementById('gdpDisp').textContent = gdp.toString();
 
-      // refresh prestige shop (safe: it clears and rebuilds)
+      // render prestige shop / skill area (safe to call frequently)
       renderPrestigeShop();
     }
 
@@ -520,8 +512,9 @@
 
     function getMultiplierIncrementBig(u){
       const base = 0.005 * Math.pow(1 + u.level, 0.38);
-      const genFactor = 1 + ((window.__genEffBaseFromSkills || 1) - 1) + (generatorPoints || 0) * 0.1;
-      return BigNum.fromNumber(Math.min(base * genFactor, 1e12));
+      const gpPenalty = computeGPPenaltyFactor();
+      const genSkillFactor = (window.__genEffBaseFromSkills || 1);
+      return BigNum.fromNumber(Math.min(base * gpPenalty * genSkillFactor, 1e12));
     }
 
     function buyUpgrade(idx, qty, silent){
@@ -614,13 +607,51 @@
       alert('プレステージ完了: prestigePoints +' + pts + '\n現在のプレステージポイント: ' + prestigePoints);
     }
 
-    // gain Infinity (IP)
-    function gainInfinity(){
-      if (!money.gteBig(INF_TARGET)){ alert('まだ無限に到達していません'); return; }
-      if (!confirm('無限を取得しますか？（Generationを全てリセットし、無限ポイント (IP) +1）')) return;
-      infinityPoints += 1;
+    // GAIN INFINITY (IP)
+    function computeInfinityProgressPercent(bn){
+      if (!(bn instanceof BigNum)) bn = BigNum.fromObject(bn);
+      if (bn.m === 0) return 0;
+      const logVal = bigNumLog10(bn);
+      const logStart = 0;
+      const logTarget = bigNumLog10(INF_TARGET);
+      if (!isFinite(logVal)) return 0;
+      if (logVal < logStart) return 0;
+      if (logVal >= logTarget) return 100;
+      const pct = (logVal - logStart) / (logTarget - logStart) * 100;
+      return Math.max(0, Math.min(100, pct));
+    }
 
-      // Reset Generation (but keep purchased skillNodes)
+    function gainInfinity(){
+      // if not at INF_TARGET and not InfinityBreak -> stop
+      const isBreak = infinityChallenges.every(c=>c.completed);
+      if (!money.gteBig(INF_TARGET) && !isBreak){ alert('まだ無限に到達していません'); return; }
+      if (!confirm('無限を取得しますか？（Generationを全てリセットし、無限ポイント (IP) を獲得）')) return;
+
+      // compute IP gain:
+      // base 1 IP for normal reach.
+      // If Infinity Break (all 9 completed) and money >> INF_TARGET, extra IP = floor(log10(money) - log10(INF_TARGET)) * ipMultiplier
+      let baseIP = BigNum.fromNumber(1);
+      const ipMult = ipMultiplierFromChallenges();
+      if (isBreak && money.gteBig(INF_TARGET)){
+        const deltaLog = Math.max(0, bigNumLog10(money) - bigNumLog10(INF_TARGET));
+        const extra = Math.floor(deltaLog);
+        if (extra > 0){
+          const extraBN = BigNum.fromNumber(extra * ipMult);
+          baseIP.addInPlace(extraBN);
+        } else {
+          // even if no extra orders, still add ipMult if at least one challenge completed? Keep base 1 * ipMult
+          if (ipMult > 1) {
+            baseIP = BigNum.fromNumber(1 * ipMult);
+          }
+        }
+      } else {
+        // normal: base 1 IP multiplied by ip multiplier from challenges (if some completed)
+        baseIP = BigNum.fromNumber(1 * ipMult);
+      }
+
+      infinityPoints.addInPlace(baseIP);
+
+      // Reset generation, but keep skillNodes, mines, infinityPoints, generators/IP/GP?
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -629,24 +660,17 @@
       prestigeCount = 0;
       prestigeMult = BigNum.fromNumber(1);
       lastPrestigeScore = BigNum.zero();
-
       costBaseMultVar = 1.15;
       Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
-
       speedMultiplier = 1.0;
       paused = false;
-      displayMoneyNum = 0;
-      prevProgress = new Array(upgrades.length).fill(0);
-      currProgress = new Array(upgrades.length).fill(0);
-      // keep skillNodes purchased state (per design)
       applySkillEffects();
-      initUI();
-      saveGame();
       updateUI_throttled(true);
-      alert('無限を得ました！ IP +1');
+      saveGame();
+      alert('無限を獲得しました！ IP +' + baseIP.toString());
     }
 
-    // RESET (full)
+    // full reset
     function fullReset(){
       try { localStorage.removeItem('idle_all_big_save'); } catch(e){}
       try { localStorage.removeItem(SKILL_STORAGE_KEY); } catch(e){}
@@ -659,22 +683,24 @@
       prestigeCount = 0;
       prestigeMult = BigNum.fromNumber(1);
       lastPrestigeScore = BigNum.zero();
-      infinityPoints = 0;
+      infinityPoints = BigNum.zero();
       costBaseMultVar = 1.15;
       Object.assign(globalPrestige, JSON.parse(JSON.stringify(baseGlobalPrestige)));
       generatorPoints = 0;
-      generators = new Array(10).fill(0).map(()=>({count:0,progress:0}));
+      generators = [];
+      ensureInitialGenerators();
       minesCount = 0;
-      infinityChallenges.forEach(c => c.active = false);
+      gdp = BigNum.zero();
+      infinityChallenges.forEach(c=>{ c.active=false; c.completed=false; });
       speedMultiplier = 1.0;
       paused = false;
       displayMoneyNum = 0;
       prevProgress = new Array(upgrades.length).fill(0);
       currProgress = new Array(upgrades.length).fill(0);
-      skillNodes.forEach(s => s.purchased = false);
+      skillNodes.forEach(s=>s.purchased=false);
       saveSkillNodes();
-      initUI();
       saveGame();
+      initUI();
       updateUI_throttled(true);
     }
 
@@ -693,17 +719,18 @@
           prestigeCount,
           prestigeMult: prestigeMult.toObject(),
           lastPrestigeScore: lastPrestigeScore.toObject(),
-          infinityPoints,
+          infinityPoints: infinityPoints.toObject(),
           globalPrestige,
           costBaseMultVar,
           speedMultiplier,
           paused,
           generatorPoints,
           generators,
-          softCapStartLog,
-          softCapStrength,
           minesCount,
-          challenges: infinityChallenges.map(c => ({id:c.id, active:c.active}))
+          gdp: gdp.toObject(),
+          gpPenaltyFactorBase,
+          genCostScale,
+          challenges: infinityChallenges.map(c => ({id:c.id, active:c.active, completed:c.completed}))
         };
         localStorage.setItem('idle_all_big_save', JSON.stringify(save));
         saveSkillNodes();
@@ -742,29 +769,30 @@
         if (data.prestigeMult && typeof data.prestigeMult.m === 'number') prestigeMult = BigNum.fromObject(data.prestigeMult);
         if (data.lastPrestigeScore && typeof data.lastPrestigeScore.m === 'number') lastPrestigeScore = BigNum.fromObject(data.lastPrestigeScore);
 
-        if (typeof data.infinityPoints === 'number') infinityPoints = data.infinityPoints;
+        if (data.infinityPoints && typeof data.infinityPoints.m === 'number') infinityPoints = BigNum.fromObject(data.infinityPoints);
+
         if (data.globalPrestige && typeof data.globalPrestige === 'object') Object.assign(globalPrestige, data.globalPrestige);
         if (typeof data.costBaseMultVar === 'number') costBaseMultVar = data.costBaseMultVar;
         if (typeof data.speedMultiplier === 'number') speedMultiplier = Math.max(1, Math.min(3, Math.round(data.speedMultiplier)));
         if (typeof data.paused === 'boolean') paused = !!data.paused;
 
         if (typeof data.generatorPoints === 'number') generatorPoints = data.generatorPoints;
-        if (Array.isArray(data.generators) && data.generators.length === 10){
+        if (Array.isArray(data.generators) && data.generators.length >= 1){
           generators = data.generators.map(g => ({
             count: Number.isFinite(+g.count) ? Math.max(0, Math.floor(+g.count)) : 0,
             progress: Number.isFinite(+g.progress) ? +g.progress : 0
           }));
         }
 
-        if (typeof data.softCapStartLog === 'number') softCapStartLog = data.softCapStartLog;
-        if (typeof data.softCapStrength === 'number') softCapStrength = data.softCapStrength;
-
         if (typeof data.minesCount === 'number') minesCount = data.minesCount;
+        if (data.gdp && typeof data.gdp.m === 'number') gdp = BigNum.fromObject(data.gdp);
+        if (typeof data.gpPenaltyFactorBase === 'number') gpPenaltyFactorBase = data.gpPenaltyFactorBase;
+        if (typeof data.genCostScale === 'number') genCostScale = data.genCostScale;
 
         if (Array.isArray(data.challenges)){
           data.challenges.forEach(sc => {
             const c = infinityChallenges.find(x => x.id === sc.id);
-            if (c) c.active = !!sc.active;
+            if (c){ c.active = !!sc.active; c.completed = !!sc.completed; }
           });
         }
 
@@ -772,10 +800,14 @@
       } catch(e){ console.warn('loadGame failed, clearing save', e); try{ localStorage.removeItem('idle_all_big_save'); }catch(e){} }
     }
 
-    // --------- Simulation & render ----------
+    function saveChallenges(){ try{ localStorage.setItem(INF_CHALLENGE_STORAGE, JSON.stringify(infinityChallenges.map(c=>({id:c.id, active:c.active, completed:c.completed})))) }catch(e){console.warn(e);} }
+    function loadChallenges(){ try{ const raw = localStorage.getItem(INF_CHALLENGE_STORAGE); if (!raw) return; const arr = JSON.parse(raw); arr.forEach(a=>{ const c = infinityChallenges.find(x=>x.id===a.id); if(c){ c.active=!!a.active; c.completed=!!a.completed; } }); }catch(e){console.warn(e);} }
+
+    // Simulation + render
     sanitizeUpgrades(upgrades);
     loadGame();
     loadSkillNodes();
+    loadChallenges();
     applySkillEffects();
     sanitizeUpgrades(upgrades);
     initUI();
@@ -784,14 +816,24 @@
     const FIXED_DT = 0.05;
     let accumulator = 0;
     let lastTime = performance.now();
+    let displayMoneyNum = 0;
+    let prevProgress = new Array(upgrades.length).fill(0);
+    let currProgress = new Array(upgrades.length).fill(0);
 
+    // ensure IP BigNum initial
+    if (!(infinityPoints instanceof BigNum)) infinityPoints = BigNum.fromNumber(Number(infinityPoints) || 0);
+
+    // generator simulation
     function simulateGenerators(dt){
+      // G1 generates GP (generatorPoints)
+      if (generators.length === 0) ensureInitialGenerators();
       const g1count = generators[0].count || 0;
       const g1PerSecPer = 0.001 * (window.__genEffMultiplier || 1);
       const gpGain = g1count * g1PerSecPer * dt;
       if (gpGain > 0) generatorPoints += gpGain;
 
-      for (let tier = 1; tier < 10; tier++){
+      // higher tiers produce lower tiers
+      for (let tier = 1; tier < generators.length; tier++){
         const g = generators[tier];
         if (!g || g.count <= 0) continue;
         const perSec = 0.1 * g.count * (window.__genEffMultiplier || 1);
@@ -802,8 +844,17 @@
           generators[tier-1].count += inc;
         }
       }
+
+      // Mines produce GDP
+      if (minesCount > 0){
+        const basePerMine = gdpPerMinePerSec * (1 + skillNodes.filter(s=>s.purchased && s.effect.type==='mineBonus').length * 0.05);
+        const gdpGain = minesCount * basePerMine * dt;
+        const addBN = BigNum.fromNumber(gdpGain);
+        gdp.addInPlace(addBN);
+      }
     }
 
+    // step simulation
     function simulateStep(dt){
       const s = speedMultiplier;
       for (let i=0;i<upgrades.length;i++){
@@ -842,28 +893,31 @@
 
       const addBN = baseIncome.clone();
       addBN.mulInPlace(totalMultBN);
-
       const prestigeMultNum = prestigeBoostMultiplier();
       addBN.mulByNumber(prestigeMultNum);
-
-      // apply challenge rewards that affect final income (if any)
-      infinityChallenges.forEach(c => {
-        if (!c.active) return;
-        if (c.reward.type === 'finalMult') addBN.mulByNumber(c.reward.value);
-      });
-
+      // apply some challenge reward if active (example)
+      infinityChallenges.forEach(c => { if (!c.active) return; if (c.reward && c.reward.type==='finalMult') addBN.mulByNumber(c.reward.value); });
+      // softcap internal (no tuning UI)
       const softMult = softCapMultiplierForScore(money);
       addBN.mulByNumber(softMult);
 
       addBN.mulByNumber(dt * s);
-
       money.addInPlace(addBN);
 
-      if (money.gteBig(INF_TARGET)) { money = INF_TARGET.clone(); }
+      // clamp money to INF_TARGET UNLESS Infinity Break (all 9 completed)
+      if (!infinityChallenges.every(c=>c.completed)){
+        if (money.gteBig(INF_TARGET)) { money = INF_TARGET.clone(); }
+      }
 
+      // simulate gens & mines
       simulateGenerators(dt);
+      // update gen eff multiplier including GDP impact and gp penalty
+      const skillBase = window.__genEffBaseFromSkills || 1;
+      const gpPenalty = computeGPPenaltyFactor();
+      window.__genEffMultiplier = skillBase * (1 + minesCount * 0.05) * (1 + (gdp.toNumberSafe ? gdp.toNumberSafe() * 1e-6 : 0)) * gpPenalty;
     }
 
+    // render loop
     function render(){
       const now = performance.now();
       let frameDelta = (now - lastTime) / 1000;
@@ -885,6 +939,7 @@
 
       const alpha = FIXED_DT === 0 ? 0 : (accumulator / FIXED_DT);
 
+      // money display
       if (money.m === 0){
         displayMoneyNum += (0 - displayMoneyNum) * 0.12;
         document.getElementById('money').textContent = fmtSmall(displayMoneyNum);
@@ -916,7 +971,7 @@
 
     requestAnimationFrame(render);
 
-    // wiring
+    // wiring events
     const prestigeBtn = document.getElementById('prestigeBtn');
     prestigeBtn.addEventListener('click', ()=> doPrestige(false));
 
@@ -957,6 +1012,8 @@
     const speedInc = document.getElementById('speedInc');
     const speedDec = document.getElementById('speedDec');
     const pauseBtn = document.getElementById('pauseBtn');
+    let speedMultiplier = 1.0;
+    let paused = false;
     function clampSpeed(v){ return Math.max(1, Math.min(3, Math.round(v))); }
     function updateSpeedUI(force){
       speedMultiplier = clampSpeed(speedMultiplier);
@@ -977,79 +1034,96 @@
 
     updateSpeedUI(true);
 
-    // ===== Infinity (Prestige) UI & logic (reworked to avoid duplication) =====
-    function genCostForPurchase(tier, qty){
-      const base = genBaseCost[tier];
-      let total = 0;
-      let cur = generators[tier].count || 0;
+    // ---- Infinity shop / Generators / Mines logic ----
+
+    // generator cost formula (IP-based): cost = ceil(base * genCostScale^(count))
+    function genTierCostIP(tierIndex, count){
+      // cost grows faster with tierIndex (higher tier more expensive baseline)
+      const base = genBaseForTier(tierIndex);
+      return Math.ceil(base * Math.pow(genCostScale, count));
+    }
+    function genBaseForTier(tierIndex){
+      // base grows exponentially with tierIndex so higher tiers start expensive
+      return genBaseCostBase * Math.pow(8, tierIndex); // tuneable
+    }
+
+    // buy generator with IP
+    function buyGeneratorWithIP(tier, qty){
+      qty = Number(qty) || 1;
+      if (qty <= 0) return;
+      // ensure tier exists
+      while (tier >= generators.length) generators.push({count:0,progress:0});
+      const cur = generators[tier].count || 0;
+      let totalCost = 0;
       for (let k=0;k<qty;k++){
-        total += Math.ceil(base * Math.pow(genCostScale, cur + k));
+        totalCost += genTierCostIP(tier, cur + k);
       }
-      return total;
-    }
-    function buyGenerator(tier, qty){
-      qty = Number(qty) || 1;
-      if (qty <= 0) return;
-      const cost = genCostForPurchase(tier, qty);
-      if (infinityPoints < cost){ alert('IPが足りません'); return; }
-      infinityPoints -= cost;
+      const costBN = BigNum.fromNumber(totalCost);
+      if (infinityPoints.ltBig(costBN)){ alert('IPが足りません'); return; }
+      infinityPoints.subInPlace(costBN);
       generators[tier].count += qty;
+      // gentle side-effect: buying high tiers increases gpPenaltyFactor (makes it harder)
+      gpPenaltyFactorBase += 0.0005 * qty;
       saveGame();
       updateUI_throttled(true);
-      alert(`G${tier+1} を ${qty} 個購入しました（IP -${cost}）`);
+      alert(`G${tier+1} を ${qty} 個購入しました（IP -${costBN.toString()}）`);
     }
 
-    // Mines
-    function mineCost(qty){
-      let total = 0;
-      let cur = minesCount;
-      for (let i=0;i<qty;i++){
-        total += Math.ceil(minesBaseCost * Math.pow(minesCostScale, cur + i));
-      }
-      return total;
+    // allow adding new generator tier purchase (makes infinite tiers possible)
+    function buyNextTierOnce(){
+      const nextTier = generators.length;
+      // set a cost to unlock next tier in IP
+      const unlockCost = BigNum.fromNumber(Math.ceil(genBaseForTier(nextTier) * Math.pow(genCostScale, 0)));
+      if (infinityPoints.ltBig(unlockCost)){ alert('IPが足りません（次のジェネレーター階層の解放）'); return; }
+      infinityPoints.subInPlace(unlockCost);
+      generators.push({count:1, progress:0}); // give 1 unit on unlock
+      saveGame();
+      updateUI_throttled(true);
+      alert('新しいジェネレーター階層を解放しました（G' + (nextTier+1) + ' が +1 所持）');
     }
-    function buyMine(qty){
+
+    // Mines IP cost
+    function mineCostIP(qty){
+      let total = 0;
+      for (let i=0;i<qty;i++){
+        total += Math.ceil(minesBaseIP * Math.pow(minesIPScale, minesCount + i));
+      }
+      return BigNum.fromNumber(total);
+    }
+    function buyMineWithIP(qty){
       qty = Number(qty) || 1;
       if (qty <= 0) return;
-      const cost = mineCost(qty);
-      if (infinityPoints < cost){ alert('IPが足りません'); return; }
-      infinityPoints -= cost;
+      const cost = mineCostIP(qty);
+      if (infinityPoints.ltBig(cost)){ alert('IPが足りません'); return; }
+      infinityPoints.subInPlace(cost);
       minesCount += qty;
-      // update gen eff multiplier
-      window.__genEffMultiplier = (window.__genEffBaseFromSkills || 1) * (1 + minesCount * 0.05);
+      // immediate effect reflected in simulateGenerators via window.__genEffMultiplier
       saveGame();
       updateUI_throttled(true);
-      alert(`Mine を ${qty} 個購入しました（IP -${cost}）`);
+      alert(`Mine を ${qty} 個購入しました（IP -${cost.toString()}）`);
     }
 
-    // Challenges
-    function loadChallenges(){
-      try {
-        const raw = localStorage.getItem(INF_CHALLENGE_STORAGE);
-        if (!raw) return;
-        const arr = JSON.parse(raw);
-        if (!Array.isArray(arr)) return;
-        arr.forEach(a => {
-          const c = infinityChallenges.find(x => x.id === a.id);
-          if (c) c.active = !!a.active;
-        });
-      } catch(e){ console.warn('loadChallenges fail', e); }
+    // spend GDP to boost generator efficiency (consumable)
+    function spendGDPBoostAll(percent, gdpCost){
+      // percent: e.g., 0.05 for +5% generator efficiency
+      const costBN = BigNum.fromNumber(gdpCost);
+      if (gdp.ltBig(costBN)){ alert('GDPが足りません'); return; }
+      gdp.subInPlace(costBN);
+      // apply permanent-ish boost: reduce gpPenaltyFactorBase slightly (effectively increases efficiency)
+      gpPenaltyFactorBase = Math.max(0.001, gpPenaltyFactorBase - percent * 0.02);
+      saveGame();
+      updateUI_throttled(true);
+      alert('GDPを消費しました。ジェネレーター効率が向上しました。');
     }
-    function saveChallenges(){
-      try {
-        localStorage.setItem(INF_CHALLENGE_STORAGE, JSON.stringify(infinityChallenges.map(c => ({id:c.id, active:c.active}))));
-      } catch(e){ console.warn('saveChallenges fail', e); }
-    }
+
+    // Challenges controls
     function startChallenge(id){
-      // only one active at a time
       if (infinityChallenges.some(c=>c.active)) { alert('既にチャレンジがアクティブです。まずは解除してください。'); return; }
       const c = infinityChallenges.find(x=>x.id===id);
       if (!c) return;
-      if (infinityPoints < c.reqIP){ alert('必要なIPがありません'); return; }
       if (!confirm(`${c.name} を開始しますか？\n効果: ${c.desc}\n開始するとGenerationがリセットされます。`)) return;
-      // apply: set active, reset generation
       c.active = true;
-      // reset generation-like gainInfinity but keep IP/mines/skill nodes
+      // reset Generation but keep IP/skills/mines
       money = BigNum.zero();
       baseIncome = BigNum.fromNumber(1);
       upgrades = cloneTemplate();
@@ -1057,9 +1131,7 @@
       prestigePoints = 0;
       prestigeCount = 0;
       lastPrestigeScore = BigNum.zero();
-      // apply skill/mine base
       applySkillEffects();
-      window.__genEffMultiplier = (window.__genEffBaseFromSkills || 1) * (1 + minesCount * 0.05);
       saveChallenges();
       saveGame();
       initUI();
@@ -1070,48 +1142,58 @@
       const c = infinityChallenges.find(x=>x.id===id);
       if (!c) return;
       if (!c.active) return;
-      if (!confirm(`${c.name} を終了しますか？（チャレンジ状態を解除します）`)) return;
+      if (!confirm(`${c.name} を停止しますか？`)) return;
       c.active = false;
       saveChallenges();
       saveGame();
       updateUI_throttled(true);
-      alert('チャレンジを解除しました: ' + c.name);
+      alert('チャレンジ停止: ' + c.name);
+    }
+    function completeChallengeManual(id){
+      const c = infinityChallenges.find(x=>x.id===id);
+      if (!c) return;
+      if (!confirm(`${c.name} を達成扱いにしますか？（テスト用）`)) return;
+      c.completed = true;
+      c.active = false;
+      saveChallenges();
+      saveGame();
+      updateUI_throttled(true);
+      alert('チャレンジ達成: ' + c.name + '\n現在の IP 倍率: ×' + ipMultiplierFromChallenges());
     }
 
-    // Skill UI (placed in prestigeShop)
+    // Skill UI (IP sequential purchase)
     function initSkillUI(shop){
-      // remove previous skill area if present
       const prev = shop.querySelector('#skillArea');
       if (prev) prev.remove();
       const skillCard = document.createElement('div');
       skillCard.id = 'skillArea';
       skillCard.className = 'card col';
-      skillCard.innerHTML = `<div><strong>無限スキルツリー（Skill Nodes）</strong></div><div class="small">タップして詳細・購入（Cost = prestige points）</div>`;
+      skillCard.innerHTML = `<div><strong>無限スキルツリー（IP で順次購入）</strong></div><div class="small">1 → 2 → ... の順で購入。50 番を購入すると Mines が解放されます。</div>`;
       const grid = document.createElement('div');
       grid.className = 'skillsGrid';
       skillNodes.forEach((s, idx) => {
         const btn = document.createElement('button');
         btn.className = 'skillBtn' + (s.purchased ? ' purchased' : '');
         btn.id = 'skillBtn_' + idx;
-        btn.textContent = s.name + '\n(' + s.cost + ')';
+        btn.textContent = `${s.name}\nCost: ${s.cost} IP\n${s.purchased ? 'Purchased' : 'Buy'}`;
         btn.addEventListener('click', ()=>{
-          const detail = `ID:${s.id}\n${s.name}\nEffect: ${s.effect.type} × ${s.effect.value}\nCost: ${s.cost} pts\nPurchased: ${s.purchased ? 'Yes' : 'No'}`;
-          if (s.purchased){
-            alert(detail);
-            return;
-          }
-          if (confirm(detail + '\n\n購入しますか？（プレステージポイントを消費）')){
-            if (prestigePoints >= s.cost){
-              prestigePoints -= s.cost;
-              s.purchased = true;
-              saveSkillNodes();
-              applySkillEffects();
-              saveGame();
-              updateUI_throttled(true);
-              initSkillUI(shop);
-              alert('購入しました: ' + s.name);
-            } else alert('プレステージポイントが足りません');
-          }
+          const detail = `ID:${s.id}\n${s.name}\nEffect: ${s.effect.type} ${JSON.stringify(s.effect.value)}\nCost: ${s.cost} IP\nPurchased: ${s.purchased ? 'Yes' : 'No'}`;
+          if (s.purchased){ alert(detail); return; }
+          // sequential purchase rule
+          const firstNot = skillNodes.findIndex(x=>!x.purchased);
+          if (firstNot !== idx){ alert('先に前のスキルを購入してください（順番に購入）'); return; }
+          if (!confirm(detail + '\n\n購入しますか？（IP を消費）')) return;
+          // check IP
+          const costBN = BigNum.fromNumber(s.cost);
+          if (infinityPoints.ltBig(costBN)){ alert('IP が足りません'); return; }
+          infinityPoints.subInPlace(costBN);
+          s.purchased = true;
+          saveSkillNodes();
+          applySkillEffects();
+          saveGame();
+          initSkillUI(shop);
+          updateUI_throttled(true);
+          alert('購入しました: ' + s.name + (idx === SKILL_COUNT-1 ? '\n50番を購入したため Mines が解放されました' : ''));
         });
         grid.appendChild(btn);
       });
@@ -1119,43 +1201,25 @@
       shop.appendChild(skillCard);
     }
 
-    // ---------- IMPORTANT: renderPrestigeShop now clears and rebuilds the entire shop ----------
+    // Render prestigeShop (Generation tab). NOTE: removed softcap tuning UI per request.
     function renderPrestigeShop(){
       const shop = document.getElementById('prestigeShop');
       if (!shop) return;
-      // Clear to avoid duplication (fix for infinite generator UI bug)
       shop.innerHTML = '';
 
-      // skill area
+      // Skill tree
       initSkillUI(shop);
 
-      // tuning controls
-      const tune = document.createElement('div');
-      tune.className = 'card';
-      tune.innerHTML = `<div><strong>Softcap チューニング</strong></div>
-        <div class="small">Start log10: <input id="softStart" type="number" style="width:80px" value="${softCapStartLog}"> Strength: <input id="softStr" type="number" step="0.001" style="width:80px" value="${softCapStrength}"> <button id="applySoft" class="btn btn-small">適用</button></div>
-        <div class="small">※ softcapStart を上げる / strength を下げると e150 などでの頭打ちを緩和できます。</div>`;
-      shop.appendChild(tune);
-      // apply events (use delegation-safe rebind)
-      setTimeout(()=>{
-        const softStartEl = document.getElementById('softStart');
-        const softStrEl = document.getElementById('softStr');
-        const applySoft = document.getElementById('applySoft');
-        if (softStartEl) softStartEl.addEventListener('change', (e)=> { softCapStartLog = Number(e.target.value) || softCapStartLog; saveGame(); updateUI_throttled(true); });
-        if (softStrEl) softStrEl.addEventListener('change', (e)=> { softCapStrength = Number(e.target.value) || softCapStrength; saveGame(); updateUI_throttled(true); });
-        if (applySoft) applySoft.addEventListener('click', ()=> { saveGame(); updateUI_throttled(true); alert('softcap 設定を保存しました'); });
-      },0);
-
-      // prestige items
+      // Prestige info
       const info = document.createElement('div'); info.className='card';
       info.innerHTML = `<div><strong>プレステージポイント: ${prestigePoints}</strong></div><div class="small">プレステージ回数: ${prestigeCount}</div>`;
       shop.appendChild(info);
 
+      // Prestige items (purchasable with prestigePoints) - kept small
       const prestigeItems = [
         { id:'m_add', title:'全アップグレード m +0.01', cost:2, apply(){ globalPrestige.mAdd += 0.01; } },
         { id:'r_mul', title:'全アップグレード r ×1.05', cost:3, apply(){ globalPrestige.rMul *= 1.05; } },
         { id:'cost_dec', title:'全アップグレード コスト -10%', cost:4, apply(){ globalPrestige.costMul *= 0.90; } },
-        { id:'costGrowth_down', title:'コスト成長率を-0.01', cost:6, apply(){ costBaseMultVar = Math.max(1.01, costBaseMultVar - 0.01); } },
       ];
       prestigeItems.forEach(item => {
         const card = document.createElement('div'); card.className='card';
@@ -1174,62 +1238,74 @@
         shop.appendChild(card);
       });
 
-      // IP / GP info
+      // IP / GP / Mines info
       const ipCard = document.createElement('div'); ipCard.className='card';
-      ipCard.innerHTML = `<div><strong>無限ポイント(IP): ${infinityPoints}</strong></div><div class="small">GP: ${generatorPoints.toFixed(4)}</div>`;
+      ipCard.innerHTML = `<div><strong>無限ポイント(IP): ${infinityPoints.toString()}</strong></div><div class="small">GP: ${generatorPoints.toFixed(4)} — Mines: ${minesCount} — GDP: ${gdp.toString()}</div>
+        <div class="small">IP multiplier (達成済みチャレンジ数に依存): ×${ipMultiplierFromChallenges()}</div>`;
       shop.appendChild(ipCard);
 
-      // Generators
-      const genContainer = document.createElement('div'); genContainer.className='card col';
-      genContainer.innerHTML = `<div><strong>Generators (G1〜G10) — IPで購入</strong></div><div class="small">G1はGPを生成。G2..G10は下位ジェネレーターを増やします。</div>`;
-      for (let t=0;t<10;t++){
-        const tier = t;
-        const g = generators[tier];
-        const base = genBaseCost[tier];
-        const nextCost = Math.ceil(base * Math.pow(genCostScale, (g.count||0)));
+      // Generators area: show current tiers up to last + 3
+      const genCard = document.createElement('div'); genCard.className='card col';
+      genCard.innerHTML = `<div><strong>Generators — IPで購入（無限階層対応）</strong></div><div class="small">GPはG1が生成。高位ジェネレーターは低位を増やす。購入で階層を拡張できます。</div>`;
+      const maxShow = Math.min(generators.length + 3, generators.length + 12); // show some next tiers
+      for (let t=0;t<maxShow;t++){
+        const g = generators[t] || {count:0,progress:0};
+        const nextCost = genTierCostIP(t, g.count || 0);
         const line = document.createElement('div'); line.style.display='flex'; line.style.gap='8px'; line.style.alignItems='center';
-        line.innerHTML = `<div style="flex:1"><strong>G${tier+1}</strong> — 所持: <span id="gcount${tier}">${g.count}</span></div><div class="small">次: ${nextCost} IP</div>`;
+        line.innerHTML = `<div style="flex:1"><strong>G${t+1}</strong> — 所持: <span id="gcount${t}">${g.count||0}</span></div><div class="small">次: ${nextCost} IP</div>`;
         const buyBtn = document.createElement('button'); buyBtn.className='btn btn-small'; buyBtn.textContent='Buy ×1';
-        buyBtn.addEventListener('click', ()=> buyGenerator(tier, 1));
+        buyBtn.addEventListener('click', ()=> buyGeneratorWithIP(t, 1));
         const buy5 = document.createElement('button'); buy5.className='btn btn-small'; buy5.textContent='Buy ×5';
-        buy5.addEventListener('click', ()=> buyGenerator(tier, 5));
+        buy5.addEventListener('click', ()=> buyGeneratorWithIP(t, 5));
         line.appendChild(buyBtn); line.appendChild(buy5);
-        genContainer.appendChild(line);
+        genCard.appendChild(line);
       }
-      shop.appendChild(genContainer);
+      // button to unlock next tier (infinite)
+      const unlockLine = document.createElement('div'); unlockLine.style.marginTop='6px';
+      const unlockBtn = document.createElement('button'); unlockBtn.className='btn btn-small'; unlockBtn.textContent = '次の階層を解放 (Unlock Next Tier)';
+      unlockBtn.addEventListener('click', ()=> buyNextTierOnce());
+      unlockLine.appendChild(unlockBtn);
+      genCard.appendChild(unlockLine);
+      shop.appendChild(genCard);
 
-      // Mines UI
+      // Mines area
       const mineCard = document.createElement('div'); mineCard.className='card';
-      mineCard.innerHTML = `<div><strong>Mines</strong> — 所持: <span id="mineCount">${minesCount}</span></div>
-        <div class="small">Mine はジェネレーター効率を +5%（累積）します。次のコスト: <span id="mineNextCost">${Math.ceil(minesBaseCost * Math.pow(minesCostScale, minesCount))}</span> IP</div>
-        <div style="margin-top:6px"><button id="buyMine1" class="btn btn-small">Buy ×1</button> <button id="buyMine5" class="btn btn-small">Buy ×5</button></div>`;
+      const mineUnlocked = skillNodes[SKILL_COUNT-1] && skillNodes[SKILL_COUNT-1].purchased;
+      mineCard.innerHTML = `<div><strong>Mines</strong> — 所持: <span id="mineCount">${minesCount}</span>${mineUnlocked ? '' : '（最後のスキルを購入で解放）'}</div>
+        <div class="small">Mine は GDP を生成します。GDP はジェネレーター効率を強化できます。</div>`;
       shop.appendChild(mineCard);
-      setTimeout(()=>{
-        const b1 = document.getElementById('buyMine1');
-        const b5 = document.getElementById('buyMine5');
-        if (b1) b1.addEventListener('click', ()=> buyMine(1));
-        if (b5) b5.addEventListener('click', ()=> buyMine(5));
-      },0);
+      if (mineUnlocked){
+        const mineControls = document.createElement('div'); mineControls.className='card';
+        mineControls.innerHTML = `<div class="small">次の Mine のコスト: ${mineCostIP(1).toString()} IP</div>
+          <button id="buyMine1" class="btn btn-small">Buy ×1</button> <button id="buyMine5" class="btn btn-small">Buy ×5</button>
+          <div style="margin-top:6px" class="small">GDP を使ってジェネ効率を恒久的に上げる: <button id="spendGDP" class="btn btn-small">Spend 100 GDP (+2% eff)</button></div>`;
+        shop.appendChild(mineControls);
+        setTimeout(()=>{ const b1 = document.getElementById('buyMine1'); const b5 = document.getElementById('buyMine5'); const sp = document.getElementById('spendGDP');
+          if (b1) b1.addEventListener('click', ()=> buyMineWithIP(1));
+          if (b5) b5.addEventListener('click', ()=> buyMineWithIP(5));
+          if (sp) sp.addEventListener('click', ()=> spendGDPBoostAll(0.02, 100));
+        },0);
+      }
 
-      // Challenges UI
+      // Challenges UI (9)
       const chCard = document.createElement('div'); chCard.className='card col';
-      chCard.innerHTML = `<div><strong>Infinity チャレンジ</strong></div><div class="small">1つだけ同時にアクティブにできます（開始で Generation リセット）。</div>`;
+      chCard.innerHTML = `<div><strong>Infinity チャレンジ</strong></div><div class="small">最大 9 個。達成数に応じて IP 倍率が増加します（1個で×2、9個で×18）。</div>`;
       infinityChallenges.forEach(c => {
         const line = document.createElement('div');
         line.style.display='flex'; line.style.gap='8px'; line.style.alignItems='center'; line.style.marginTop='6px';
-        line.innerHTML = `<div style="flex:1"><strong>${c.name}</strong> — ${c.desc}</div><div class="small">Req IP: ${c.reqIP}</div>`;
-        const btn = document.createElement('button'); btn.className='btn btn-small';
-        btn.textContent = c.active ? '停止' : '開始';
-        btn.addEventListener('click', ()=> {
-          if (c.active) stopChallenge(c.id); else startChallenge(c.id);
-        });
-        line.appendChild(btn);
+        const status = c.completed ? '達成済' : (c.active ? '進行中' : '未開始');
+        line.innerHTML = `<div style="flex:1"><strong>${c.name}</strong> — ${c.desc}</div><div class="small">${status}</div>`;
+        const btnStart = document.createElement('button'); btnStart.className='btn btn-small'; btnStart.textContent = c.active ? '停止' : '開始';
+        btnStart.addEventListener('click', ()=> { if (c.active) stopChallenge(c.id); else startChallenge(c.id); });
+        const btnComp = document.createElement('button'); btnComp.className='btn btn-small'; btnComp.textContent='Complete (manual)';
+        btnComp.addEventListener('click', ()=> completeChallengeManual(c.id));
+        line.appendChild(btnStart); line.appendChild(btnComp);
         chCard.appendChild(line);
       });
       shop.appendChild(chCard);
     }
 
-    // Debug support
+    // Debug helpers
     (function() {
       const params = window.location.search;
       const match = params.match(/\?=(.+)/);
@@ -1259,7 +1335,7 @@
           alert("デバッグ: 所持金を " + value + " に設定しました");
           break;
         case "addIP":
-          infinityPoints += Number(value) || 1;
+          infinityPoints.addInPlace(BigNum.fromNumber(Number(value) || 1));
           updateUI_throttled(true);
           alert("デバッグ: IP を追加しました");
           break;
@@ -1267,6 +1343,12 @@
           generators[0].count += Number(value) || 1;
           updateUI_throttled(true);
           alert("デバッグ: G1 を追加しました");
+          break;
+        case "completeAllChallenges":
+          infinityChallenges.forEach(c=>c.completed=true);
+          saveChallenges();
+          updateUI_throttled(true);
+          alert("デバッグ: 全チャレンジを達成にしました");
           break;
         case "reset":
           if (confirm("本当に全てをリセットしますか？")){
@@ -1279,7 +1361,7 @@
       }
     })();
 
-    // ---------------- Tabs handling ----------------
+    // Tabs
     const tabGen = document.getElementById('tabGen');
     const tabInf = document.getElementById('tabInf');
     const upgradeEl = document.getElementById('upgradeContainer');
@@ -1299,11 +1381,9 @@
     }
     tabGen.addEventListener('click', ()=> showTab('gen'));
     tabInf.addEventListener('click', ()=> showTab('inf'));
-    // default: Generation
     showTab('gen');
 
-    // ensure challenge/load state applied
-    loadChallenges();
+    // apply loaded challenge/skill states
     applySkillEffects();
     window.__genEffMultiplier = (window.__genEffBaseFromSkills || 1) * (1 + minesCount * 0.05);
 
