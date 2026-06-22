@@ -6,29 +6,29 @@
   <title>Minecraft Particle Shape Generator</title>
   <style>
     :root {
-      --bg: #07111b;
-      --panel: rgba(255,255,255,0.06);
-      --text: #eef6ff;
-      --muted: rgba(238,246,255,0.72);
-      --line: rgba(255,255,255,0.14);
-      --accent: #7cc7ff;
-      --accent2: #a9ffcf;
-      --danger: #ff8a8a;
-      --shadow: 0 20px 50px rgba(0,0,0,0.35);
-      --radius: 18px;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg:#07111b;
+      --panel:rgba(255,255,255,.06);
+      --text:#eef6ff;
+      --muted:rgba(238,246,255,.72);
+      --line:rgba(255,255,255,.14);
+      --accent:#7cc7ff;
+      --accent2:#a9ffcf;
+      --danger:#ff8a8a;
+      --shadow:0 20px 50px rgba(0,0,0,.35);
+      --radius:18px;
+      --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+      --sans:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      background:
-        radial-gradient(circle at top left, rgba(124,199,255,0.15), transparent 32%),
-        radial-gradient(circle at top right, rgba(169,255,207,0.12), transparent 24%),
-        linear-gradient(180deg, #07111b 0%, #08131f 100%);
       color: var(--text);
       font-family: var(--sans);
+      background:
+        radial-gradient(circle at top left, rgba(124,199,255,.15), transparent 32%),
+        radial-gradient(circle at top right, rgba(169,255,207,.12), transparent 24%),
+        linear-gradient(180deg,#07111b 0%,#08131f 100%);
     }
     .app {
       display: grid;
@@ -51,7 +51,11 @@
       min-width: 0;
       overflow: hidden;
     }
-    h1 { margin: 0 0 10px; font-size: 1.25rem; }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.25rem;
+      letter-spacing: 0.02em;
+    }
     .sub {
       margin: 0 0 16px;
       color: var(--muted);
@@ -63,7 +67,10 @@
       padding-top: 14px;
       border-top: 1px solid var(--line);
     }
-    .section h2 { margin: 0 0 10px; font-size: 0.98rem; }
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 0.98rem;
+    }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
     label {
@@ -75,8 +82,8 @@
     input, select, textarea, button {
       width: 100%;
       border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(5,10,16,0.65);
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(5,10,16,.65);
       color: var(--text);
       padding: 10px 12px;
       font: inherit;
@@ -86,40 +93,52 @@
       min-height: 124px;
       resize: vertical;
       font-family: var(--mono);
-      font-size: 0.84rem;
+      font-size: .84rem;
       line-height: 1.45;
       white-space: pre;
     }
     input:focus, select:focus, textarea:focus {
-      border-color: rgba(124,199,255,0.55);
-      box-shadow: 0 0 0 3px rgba(124,199,255,0.12);
+      border-color: rgba(124,199,255,.55);
+      box-shadow: 0 0 0 3px rgba(124,199,255,.12);
     }
     .row { margin-bottom: 10px; }
-    .btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .btns {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
     .btn {
       cursor: pointer;
       font-weight: 650;
       transition: transform .08s ease, border-color .15s ease, background .15s ease;
     }
-    .btn:hover { transform: translateY(-1px); border-color: rgba(124,199,255,0.48); }
-    .btn.good { background: linear-gradient(180deg, rgba(169,255,207,0.18), rgba(169,255,207,0.08)); }
-    .btn.warn { background: linear-gradient(180deg, rgba(255,138,138,0.18), rgba(255,138,138,0.08)); }
+    .btn:hover { transform: translateY(-1px); border-color: rgba(124,199,255,.48); }
+    .btn.good {
+      background: linear-gradient(180deg, rgba(169,255,207,.18), rgba(169,255,207,.08));
+    }
+    .btn.warn {
+      background: linear-gradient(180deg, rgba(255,138,138,.18), rgba(255,138,138,.08));
+    }
     .canvasWrap {
       position: relative;
       min-height: 520px;
       background:
-        radial-gradient(circle at center, rgba(255,255,255,0.06), transparent 55%),
-        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+        radial-gradient(circle at center, rgba(255,255,255,.06), transparent 55%),
+        linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
     }
-    canvas { display: block; width: 100%; height: 100%; }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
     .overlay {
       position: absolute;
       left: 14px;
       top: 14px;
       padding: 10px 12px;
       border-radius: 12px;
-      background: rgba(5,10,16,0.55);
-      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(5,10,16,.55);
+      border: 1px solid rgba(255,255,255,.12);
       color: var(--muted);
       font-size: 0.88rem;
       pointer-events: none;
@@ -134,7 +153,10 @@
       gap: 12px;
       flex-wrap: wrap;
     }
-    .status { font-family: var(--mono); color: var(--accent2); }
+    .status {
+      font-family: var(--mono);
+      color: var(--accent2);
+    }
     .muted { color: var(--muted); }
     .error {
       color: var(--danger);
@@ -153,7 +175,10 @@
   <div class="app">
     <aside class="panel">
       <h1>Minecraft Particle Shape Generator</h1>
-      <p class="sub">正n角形・円・自由な媒介変数を3Dで描画して、Minecraft の <span style="font-family:var(--mono)">mcfunction</span> 用 particle 座標へ書き出します。</p>
+      <p class="sub">
+        正n角形・円・自由な媒介変数を3Dで描画して、
+        Minecraft の <span style="font-family:var(--mono)">mcfunction</span> 用 particle 座標へ書き出します。
+      </p>
 
       <div class="section">
         <h2>形の種類</h2>
@@ -165,11 +190,12 @@
             <option value="param">媒介変数曲線</option>
           </select>
         </div>
+
         <div id="polygonFields">
           <div class="grid">
             <div class="row">
-              <label for="sides">n</label>
-              <input id="sides" type="number" min="3" max="500" step="1" value="6" />
+              <label for="sides">n（小数で星形）</label>
+              <input id="sides" type="number" min="2.1" max="500" step="0.1" value="6" />
             </div>
             <div class="row">
               <label for="subdivisions">辺ごとの点</label>
@@ -177,12 +203,20 @@
             </div>
           </div>
         </div>
+
         <div id="circleFields" class="hide">
-          <div class="row">
-            <label for="circleSegments">分割数</label>
-            <input id="circleSegments" type="number" min="3" max="1000" step="1" value="180" />
+          <div class="grid">
+            <div class="row">
+              <label for="circleSegments">分割数</label>
+              <input id="circleSegments" type="number" min="3" max="1000" step="1" value="180" />
+            </div>
+            <div class="row">
+              <label for="circleClosed">閉曲線</label>
+              <select id="circleClosed"><option value="1">はい</option><option value="0">いいえ</option></select>
+            </div>
           </div>
         </div>
+
         <div id="paramFields" class="hide">
           <div class="row">
             <label for="xExpr">x(t)</label>
@@ -209,6 +243,10 @@
               <label for="samples">分割数</label>
               <input id="samples" type="number" min="2" max="5000" step="1" value="240" />
             </div>
+          </div>
+          <div class="row">
+            <label for="closed">閉曲線</label>
+            <select id="closed"><option value="1">はい</option><option value="0">いいえ</option></select>
           </div>
         </div>
       </div>
@@ -295,6 +333,20 @@
             <select id="modeOut"><option value="force">force</option><option value="normal">normal</option></select>
           </div>
         </div>
+        <div class="grid3">
+          <div class="row">
+            <label for="prefixX">X prefix</label>
+            <select id="prefixX"><option value="~">~</option><option value="^">^</option></select>
+          </div>
+          <div class="row">
+            <label for="prefixY">Y prefix</label>
+            <select id="prefixY"><option value="~">~</option><option value="^">^</option></select>
+          </div>
+          <div class="row">
+            <label for="prefixZ">Z prefix</label>
+            <select id="prefixZ"><option value="~">~</option><option value="^">^</option></select>
+          </div>
+        </div>
         <div class="row">
           <label for="commandName">function名</label>
           <input id="commandName" type="text" value="generated_shape" />
@@ -303,6 +355,7 @@
 
       <div class="section">
         <div class="btns">
+          <button class="btn primary" id="generateBtn">更新</button>
           <button class="btn good" id="downloadBtn">mcfunctionをダウンロード</button>
           <button class="btn" id="copyBtn">コピー</button>
           <button class="btn warn" id="clearBtn">リセット</button>
@@ -338,12 +391,14 @@
       sides: $('sides'),
       subdivisions: $('subdivisions'),
       circleSegments: $('circleSegments'),
+      circleClosed: $('circleClosed'),
       xExpr: $('xExpr'),
       yExpr: $('yExpr'),
       zExpr: $('zExpr'),
       tMin: $('tMin'),
       tMax: $('tMax'),
       samples: $('samples'),
+      closed: $('closed'),
       scale: $('scale'),
       offsetX: $('offsetX'),
       offsetY: $('offsetY'),
@@ -360,12 +415,16 @@
       dz: $('dz'),
       speed: $('speed'),
       modeOut: $('modeOut'),
+      prefixX: $('prefixX'),
+      prefixY: $('prefixY'),
+      prefixZ: $('prefixZ'),
       commandName: $('commandName'),
       output: $('output'),
       view: $('view'),
       overlay: $('overlay'),
       stats: $('stats'),
       errorBox: $('errorBox'),
+      generateBtn: $('generateBtn'),
       downloadBtn: $('downloadBtn'),
       copyBtn: $('copyBtn'),
       clearBtn: $('clearBtn'),
@@ -373,6 +432,8 @@
 
     const ctx = els.view.getContext('2d');
     let pointsWorld = [];
+    let lastGenerated = '';
+    let outputDirty = false;
 
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
     function rad(d) { return d * Math.PI / 180; }
@@ -388,7 +449,7 @@
     }
 
     function rotatePoint(p, rx, ry, rz) {
-      let { x, y, z } = p;
+      let {x, y, z} = p;
       let c = Math.cos(rx), s = Math.sin(rx);
       [y, z] = [y * c - z * s, y * s + z * c];
       c = Math.cos(ry); s = Math.sin(ry);
@@ -405,25 +466,103 @@
       const cam = Number(els.camera.value) || 14;
       const z = p.z + cam;
       const s = persp / Math.max(1e-3, z);
-      return { x: w * 0.5 + p.x * s, y: h * 0.5 - p.y * s, s };
+      return {
+        x: w * 0.5 + p.x * s,
+        y: h * 0.5 - p.y * s,
+        s,
+      };
     }
 
     function evalExpr(expr) {
-      return new Function('t', `with (Math) { return (${expr}); }`);
+      const fn = new Function('t', `with (Math) { return (${expr}); }`);
+      return fn;
+    }
+
+    function gcd(a, b) {
+      a = Math.abs(Math.floor(a));
+      b = Math.abs(Math.floor(b));
+      while (b !== 0) {
+        const t = a % b;
+        a = b;
+        b = t;
+      }
+      return a;
+    }
+
+    function approxFraction(x, maxDen = 100) {
+      let best = { p: Math.round(x), q: 1, err: Math.abs(x - Math.round(x)) };
+      for (let q = 1; q <= maxDen; q++) {
+        const p = Math.round(x * q);
+        const err = Math.abs(x - p / q);
+        if (err < best.err - 1e-12) best = { p, q, err };
+      }
+      let p = best.p;
+      let q = best.q;
+      const g = gcd(p, q);
+      p /= g;
+      q /= g;
+      return { p, q };
     }
 
     function polygonPoints(n, radius, subdivisions) {
       const pts = [];
-      for (let i = 0; i < n; i++) {
-        const a0 = (i / n) * Math.PI * 2 - Math.PI / 2;
-        const a1 = ((i + 1) / n) * Math.PI * 2 - Math.PI / 2;
-        const p0 = { x: Math.cos(a0) * radius, y: Math.sin(a0) * radius, z: 0 };
-        const p1 = { x: Math.cos(a1) * radius, y: Math.sin(a1) * radius, z: 0 };
+      const rounded = Math.round(n);
+      const integerMode = Math.abs(n - rounded) < 1e-9;
+
+      if (integerMode && rounded >= 3) {
+        for (let i = 0; i < rounded; i++) {
+          const a0 = (i / rounded) * Math.PI * 2 - Math.PI / 2;
+          const a1 = ((i + 1) / rounded) * Math.PI * 2 - Math.PI / 2;
+          const p0 = { x: Math.cos(a0) * radius, y: Math.sin(a0) * radius, z: 0 };
+          const p1 = { x: Math.cos(a1) * radius, y: Math.sin(a1) * radius, z: 0 };
+          for (let j = 0; j < subdivisions; j++) {
+            const t = j / subdivisions;
+            pts.push({
+              x: p0.x * (1 - t) + p1.x * t,
+              y: p0.y * (1 - t) + p1.y * t,
+              z: 0,
+            });
+          }
+        }
+        pts.push(pts[0]);
+        return pts;
+      }
+
+      const frac = approxFraction(n, 120);
+      const p = frac.p;
+      const q = frac.q;
+
+      // 星形 {p/q}。 2.5 → 5/2 → 5点を2つ飛ばしで結ぶ。
+      const vertices = Math.max(5, p);
+      const step = Math.max(2, q % vertices);
+
+      const verts = [];
+      for (let k = 0; k < vertices; k++) {
+        const a = (k / vertices) * Math.PI * 2 - Math.PI / 2;
+        verts.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius, z: 0 });
+      }
+
+      const order = [];
+      const seen = new Set();
+      let idx = 0;
+      while (!seen.has(idx)) {
+        seen.add(idx);
+        order.push(idx);
+        idx = (idx + step) % vertices;
+      }
+
+      if (order.length < 2) {
+        order.push((order[0] + 1) % vertices);
+      }
+
+      for (let i = 0; i < order.length; i++) {
+        const v0 = verts[order[i]];
+        const v1 = verts[order[(i + 1) % order.length]];
         for (let j = 0; j < subdivisions; j++) {
           const t = j / subdivisions;
           pts.push({
-            x: p0.x * (1 - t) + p1.x * t,
-            y: p0.y * (1 - t) + p1.y * t,
+            x: v0.x * (1 - t) + v1.x * t,
+            y: v0.y * (1 - t) + v1.y * t,
             z: 0,
           });
         }
@@ -432,9 +571,10 @@
       return pts;
     }
 
-    function circlePoints(segments, radius) {
+    function circlePoints(segments, radius, closed) {
       const pts = [];
-      for (let i = 0; i <= segments; i++) {
+      const end = closed ? segments : segments - 1;
+      for (let i = 0; i <= end; i++) {
         const a = (i / segments) * Math.PI * 2 - Math.PI / 2;
         pts.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius, z: 0 });
       }
@@ -448,8 +588,10 @@
       const tMin = Number(els.tMin.value);
       const tMax = Number(els.tMax.value);
       const samples = clamp(Math.floor(Number(els.samples.value) || 100), 2, 10000);
+      const closed = els.closed.value === '1';
       const pts = [];
-      for (let i = 0; i <= samples; i++) {
+      const end = closed ? samples : samples - 1;
+      for (let i = 0; i <= end; i++) {
         const t = tMin + (tMax - tMin) * (i / samples);
         const x = Number(xFn(t));
         const y = Number(yFn(t));
@@ -481,7 +623,33 @@
     function fmt(n) {
       const v = Number(n);
       if (!Number.isFinite(v)) return '0';
-      return (Math.abs(v) < 1e-9 ? 0 : v).toFixed(3).replace(/\.000$/, '');
+      const x = Math.abs(v) < 1e-9 ? 0 : v;
+      let s = x.toFixed(3);
+      s = s.replace(/0+$/, '').replace(/\.$/, '');
+      return s;
+    }
+
+    function coordToken(prefix, value) {
+      return prefix + fmt(value);
+    }
+
+    function sanitizeFunctionName(name) {
+      let s = (name || '').trim();
+      if (!s) s = 'generated_shape';
+      let out = '';
+      for (let i = 0; i < s.length; i++) {
+        const ch = s.charAt(i);
+        const code = ch.charCodeAt(0);
+        const ok =
+          (code >= 48 && code <= 57) ||
+          (code >= 65 && code <= 90) ||
+          (code >= 97 && code <= 122) ||
+          ch === '_' || ch === '-' || ch === '.' || ch === '/';
+        out += ok ? ch : '_';
+      }
+      if (out.toLowerCase().endsWith('.txt')) out = out.slice(0, -4);
+      if (out.toLowerCase().endsWith('.mcfunction')) out = out.slice(0, -11);
+      return out || 'generated_shape';
     }
 
     function toCommand(p) {
@@ -492,47 +660,54 @@
       const dz = Number(els.dz.value) || 0;
       const speed = Number(els.speed.value) || 0;
       const mode = els.modeOut.value;
-      return `particle ${particle} ^${fmt(p.x)} ^${fmt(p.y)} ^${fmt(p.z)} ${fmt(dx)} ${fmt(dy)} ${fmt(dz)} ${fmt(speed)} ${count} ${mode}`;
+      return 'particle ' + particle + ' ' +
+        coordToken(els.prefixX.value, p.x) + ' ' +
+        coordToken(els.prefixY.value, p.y) + ' ' +
+        coordToken(els.prefixZ.value, p.z) + ' ' +
+        fmt(dx) + ' ' + fmt(dy) + ' ' + fmt(dz) + ' ' +
+        fmt(speed) + ' ' + count + ' ' + mode;
     }
 
     function buildPoints() {
       const mode = els.mode.value;
       let localPts = [];
       if (mode === 'polygon') {
-        const n = clamp(Math.floor(Number(els.sides.value) || 3), 3, 10000);
+        const n = Math.max(2.1, Number(els.sides.value) || 3);
         const subdivisions = clamp(Math.floor(Number(els.subdivisions.value) || 12), 1, 1000);
         localPts = polygonPoints(n, 3, subdivisions);
       } else if (mode === 'circle') {
         const segments = clamp(Math.floor(Number(els.circleSegments.value) || 180), 3, 10000);
-        localPts = circlePoints(segments, 3);
+        localPts = circlePoints(segments, 3, els.circleClosed.value === '1');
       } else {
         localPts = paramPoints();
       }
       return worldify(localPts);
     }
 
-    function sanitizeFunctionName(name) {
-      return (name.trim() || 'generated_shape')
-        .replace(/[^\w\-./]/g, '_')
-        .replace(/\.(txt|mcfunction)$/i, '');
+    function setOutput(text, force = false) {
+      if (force || !outputDirty) {
+        els.output.value = text;
+        outputDirty = false;
+      }
     }
 
     function updateOutput(points) {
       const name = sanitizeFunctionName(els.commandName.value);
       const lines = [];
-      lines.push(`## ${name}`);
+      lines.push('## ' + name);
       lines.push('## generated by Minecraft Particle Shape Generator');
-      lines.push(`## points: ${points.length}`);
+      lines.push('## points: ' + points.length);
       lines.push('');
-      for (const p of points) lines.push(toCommand(p));
-      if (document.activeElement !== els.output) {
-        els.output.value = lines.join('\n');
-      }
-      els.stats.textContent = `${points.length} points`;
-      els.overlay.textContent = `mode: ${els.mode.options[els.mode.selectedIndex].text} / points: ${points.length}`;
+      for (let i = 0; i < points.length; i++) lines.push(toCommand(points[i]));
+      lastGenerated = lines.join('\n');
+      setOutput(lastGenerated);
+      els.stats.textContent = points.length + ' points';
+      els.overlay.textContent = 'mode: ' + els.mode.options[els.mode.selectedIndex].text + ' / points: ' + points.length;
     }
 
-    function setError(msg) { els.errorBox.textContent = msg || ''; }
+    function setError(msg) {
+      els.errorBox.textContent = msg || '';
+    }
 
     function drawAxes() {
       const w = els.view.parentElement.clientWidth;
@@ -550,12 +725,17 @@
       axes.forEach(ax => {
         const a = project(ax.a), b = project(ax.b);
         ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.55)';
         ctx.fillText(ax.label, b.x + 4, b.y + 4);
       });
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.beginPath(); ctx.arc(origin.x, origin.y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(origin.x, origin.y, 3, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
 
@@ -586,11 +766,12 @@
       if (pointsWorld.length) drawPoints(pointsWorld);
     }
 
-    function generate() {
+    function generate(forceOutput = false) {
       try {
         setError('');
         pointsWorld = buildPoints();
         updateOutput(pointsWorld);
+        if (forceOutput) outputDirty = false;
         draw();
       } catch (err) {
         setError(String(err && err.message ? err.message : err));
@@ -609,13 +790,14 @@
     }
 
     function downloadMcfunction() {
-      if (!els.output.value.trim()) generate();
+      if (!els.output.value.trim()) generate(true);
       const name = sanitizeFunctionName(els.commandName.value);
-      const blob = new Blob([els.output.value.replace(/\s*$/, '') + '\n'], { type: 'application/octet-stream' });
+      const text = els.output.value.replace(/\s*$/, '') + '\n';
+      const blob = new Blob([text], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${name}.mcfunction`;
+      a.download = name + '.mcfunction';
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -628,7 +810,7 @@
       navigator.clipboard.writeText(text).then(() => {
         els.overlay.textContent = 'コピーしました';
         setTimeout(() => {
-          els.overlay.textContent = `mode: ${els.mode.options[els.mode.selectedIndex].text} / points: ${pointsWorld.length}`;
+          els.overlay.textContent = 'mode: ' + els.mode.options[els.mode.selectedIndex].text + ' / points: ' + pointsWorld.length;
         }, 1200);
       }).catch(() => {
         setError('クリップボードへのコピーに失敗しました。');
@@ -640,12 +822,14 @@
       els.sides.value = 6;
       els.subdivisions.value = 24;
       els.circleSegments.value = 180;
+      els.circleClosed.value = '1';
       els.xExpr.value = '3*Math.cos(t)';
       els.yExpr.value = '3*Math.sin(t)';
       els.zExpr.value = '0.6*Math.sin(2*t)';
       els.tMin.value = 0;
       els.tMax.value = Math.PI * 2;
       els.samples.value = 240;
+      els.closed.value = '1';
       els.scale.value = 1;
       els.offsetX.value = 0;
       els.offsetY.value = 0;
@@ -662,22 +846,35 @@
       els.dz.value = 0;
       els.speed.value = 0;
       els.modeOut.value = 'force';
+      els.prefixX.value = '~';
+      els.prefixY.value = '~';
+      els.prefixZ.value = '~';
       els.commandName.value = 'generated_shape';
+      outputDirty = false;
       syncModeUI();
-      generate();
+      generate(true);
     }
 
     els.mode.addEventListener('change', () => { syncModeUI(); generate(); });
 
     [
-      els.sides, els.subdivisions, els.circleSegments,
-      els.xExpr, els.yExpr, els.zExpr, els.tMin, els.tMax, els.samples,
+      els.sides, els.subdivisions, els.circleSegments, els.circleClosed,
+      els.xExpr, els.yExpr, els.zExpr, els.tMin, els.tMax, els.samples, els.closed,
       els.scale, els.offsetX, els.offsetY, els.offsetZ,
       els.rotX, els.rotY, els.rotZ, els.camera, els.perspective,
       els.particle, els.count, els.dx, els.dy, els.dz, els.speed, els.modeOut,
+      els.prefixX, els.prefixY, els.prefixZ,
       els.commandName
-    ].forEach(el => el.addEventListener('input', generate));
+    ].forEach(el => el.addEventListener('input', () => generate()));
 
+    els.output.addEventListener('input', () => {
+      outputDirty = true;
+    });
+
+    els.generateBtn.addEventListener('click', () => {
+      outputDirty = false;
+      generate(true);
+    });
     els.downloadBtn.addEventListener('click', downloadMcfunction);
     els.copyBtn.addEventListener('click', copyOutput);
     els.clearBtn.addEventListener('click', resetAll);
@@ -686,7 +883,7 @@
     window.addEventListener('load', () => {
       syncModeUI();
       resizeCanvas();
-      generate();
+      generate(true);
     });
   </script>
 </body>
