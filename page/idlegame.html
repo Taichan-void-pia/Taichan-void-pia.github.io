@@ -116,7 +116,17 @@
     function infPct(b){ if(!(b instanceof BigNum)) b=BigNum.fromObject(b); if(b.m===0) return 0; const l=log10(b), s=log10(INF_START), t=log10(INF_TARGET); if(l<s) return 0; if(l>=t) return 100; return Math.max(0, Math.min(100, (l-s)/(t-s)*100)); }
     function greater(a,b){ if(!(a instanceof BigNum)) a=BigNum.fromObject(a); if(!(b instanceof BigNum)) b=BigNum.fromObject(b); if(a.e!==b.e) return a.e>b.e; return Math.abs(a.m)>Math.abs(b.m); }
     function upgradeCost(u,extra=0){ const c=u._baseCostBN.clone(); c.mulByNumber(Math.pow(state.costBaseMultVar, Math.max(0,u.level+extra))); c.mulByNumber(1+(u.purchasePenalty||0)); c.mulByNumber(state.globalPrestige.costMul); c.mulByNumber(state.skillBoost.costMult); return c; }
-    function upgradeMultiplierBN(){ let total=BigNum.fromNumber(1); state.upgrades.forEach(u=>{ const f=BigNum.fromNumber(1); f.addInPlace(u._multBN); f.addNumber(0.02*(u.ascendCount||0)); f.addNumber(0.02*state.globalPrestige.mAdd); total.mulInPlace(f); }); return total; }
+    function upgradeMultiplierBN(){
+  let total = BigNum.fromNumber(1);
+  state.upgrades.forEach(u=>{
+    const f = BigNum.fromNumber(1);
+    f.addInPlace(u._multBN);
+    f.addInPlace(BigNum.fromNumber(0.02*(u.ascendCount||0)));
+    f.addInPlace(BigNum.fromNumber(0.02*state.globalPrestige.mAdd));
+    total.mulInPlace(f);
+  });
+  return total;
+}
     function getMultiplierIncrementBig(u){ const base=0.005*Math.pow(1+(u.level||0),0.38); const gp=1+state.generatorPoints*0.02; const gdp=1+state.goldenParticles*0.01; return BigNum.fromNumber(Math.min(base*gp*gdp*state.skillBoost.multInc, 1e18)); }
     function buyUpgrade(idx,qty,silent=false){ const u=state.upgrades[idx]; const lim=cap(u); if(u.level>=lim){ if(!silent) alert('このアップグレードは最大Lvです'); return; } let n=qty==='max' ? lim-u.level : Math.min(Number(qty)||1, lim-u.level); if(n<=0) return; let cost=BigNum.zero(); for(let k=0;k<n;k++) cost.addInPlace(upgradeCost(u,k)); if(!state.money.gteBig(cost)){ if(!silent) alert('お金が足りません'); return; } state.money.subInPlace(cost); u._rateBN.mulByNumber(Math.pow(Math.max(1,u.speedMult), n*0.12)); u.level += n; save(); renderAll(true); }
     function tryAscend(idx){ const u=state.upgrades[idx]; if(u.level<cap(u)){ alert('Lv上限に到達してから昇天可能です'); return; } if(!confirm(`${u.name} を昇天しますか？`)) return; u.ascendCount += 1; u.purchasePenalty += 0.25; u.level=0; u.progress=0; u._rateBN=BigNum.fromNumber(u.baseRate||1); u._multBN=BigNum.zero(); save(); renderAll(true); }
