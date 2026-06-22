@@ -69,6 +69,14 @@
   <div class="card" style="margin-top:10px"><h3>Infinity チャレンジ</h3><div class="small">9個。1つ達成でIP報酬が増え、9個達成でInfinity Break解放。</div><div id="challengeList" class="challengeList" style="margin-top:8px"></div></div>
   <div class="card" style="margin-top:10px"><h3>無限スキルツリー</h3><div class="small">1番から順番に購入。50番で鉱山を解放。</div><div class="skillTreeWrap" style="margin-top:8px"><svg id="skillSvg"></svg><div id="skillTree" class="skillTree"></div></div></div>
 </div>
+<button id="debugBtn" class="btn btn-small">デバッグ</button>
+<div id="debugPanel" style="display:none; margin-top:8px; padding:8px; background:rgba(255,255,255,0.03); border-radius:8px;">
+  <div class="small">例: money:1e50 / ip:10 / gp:100 / prestige / infinity / reset</div>
+  <div style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap;">
+    <input id="debugInput" type="text" style="flex:1; min-width:220px; padding:6px; border-radius:6px; border:0;" placeholder="debug command">
+    <button id="debugRunBtn" class="btn btn-primary">実行</button>
+  </div>
+</div>
 <script>
 (() => {
   function err(m){ const e=document.getElementById('error'); e.style.display='block'; e.textContent='エラー: '+m; console.error(m); }
@@ -167,7 +175,14 @@
 
     initData(); load(); sanitizeUpgrades(); computeSkillBoost(); renderTree(); renderAll(); setTab('gen'); requestAnimationFrame(tick); window.addEventListener('beforeunload', save);
     (function(){ const m=location.search.match(/\?=(.+)/); if(!m) return; const [k,v]=m[1].split(':'); if(k==='money') state.money=BigNum.fromNumber(Number(v||1e10)); if(k==='ip') state.infinityPoints += Number(v||1); if(k==='gp') state.generatorPoints += Number(v||1); if(k==='break') state.infinityBreakUnlocked=true; if(k==='skill'){ const i=Math.max(1,Math.min(state.skillNodes.length,Number(v||1)))-1; state.skillNodes[i].purchased=true; computeSkillBoost(); } save(); renderAll(); })();
-
+    function runDebugCommand(command){ if (!command) return; const [key, value] = String(command).split(":"); switch (key) { case "money": money = BigNum.fromNumber(Number(value) || 1e10); break; case "ip": infinityPoints += Number(value) || 1; break; case "gp": generatorPoints += Number(value) || 1; break; case "prestige": money = BigNum.fromNumber(1e21); break; case "infinity": money = INF_TARGET.clone ? INF_TARGET.clone() : BigNum.fromMantExp(1.8, 308); break; case "reset": fullReset(); break; case "addG1": generators[0].count += Number(value) || 1; break; case "addMine": minesCount += Number(value) || 1; break; default: alert("不明なデバッグコマンド: " + command); return;} updateUI_throttled(true); saveGame();}
+    const debugBtn = document.getElementById("debugBtn");
+    const debugPanel = document.getElementById("debugPanel");
+    const debugInput = document.getElementById("debugInput");
+    const debugRunBtn = document.getElementById("debugRunBtn");
+    debugBtn.addEventListener("click", () => { debugPanel.style.display = (debugPanel.style.display === "none") ? "block" : "none";});
+    debugRunBtn.addEventListener("click", () => { runDebugCommand(debugInput.value.trim());});
+    debugInput.addEventListener("keydown", (e) => { if (e.key === "Enter") runDebugCommand(debugInput.value.trim());});
   } catch(e){ err(e && e.message ? e.message : String(e)); }
 })();
 </script>
