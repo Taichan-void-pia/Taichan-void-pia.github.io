@@ -2,95 +2,164 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<title>Idle — Prestige & Infinity (Step4 → Step5 準備)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Idle — Generation / Infinity / Skill Tree</title>
 <style>
-/* 省略しないでください — 元の CSS をそのまま流用 */
-  body{font-family:system-ui, "Segoe UI", Roboto, Helvetica, Arial; background:#071018;color:#fff;margin:0;padding:16px}
-  h1{color:#7bf3a8;margin:0 0 8px 0}
-  .errorBanner{background:#5b1010;color:#fff;padding:8px;border-radius:6px;margin-bottom:10px;display:none}
-  .stats{background:rgba(255,255,255,0.03);padding:10px;border-radius:8px;margin-bottom:10px}
-  #money{font-weight:700;color:#7bf3a8}
-  #upgradeContainer{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
-  .upgrade{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px}
-  .meter{height:14px;background:rgba(255,255,255,0.04);border-radius:7px;overflow:hidden;margin:6px 0}
-  .fill{height:100%;background:linear-gradient(90deg,#7bf3a8,#39d092);width:100%;transform-origin:left;will-change:transform}
-  .btn{padding:6px;border-radius:6px;border:0;cursor:pointer}
-  .btn-primary{background:#7bf3a8;color:#003628}
-  .btn-small{background:rgba(255,255,255,0.03);color:#cfe8da;padding:4px 6px}
-  .panel{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  .small{font-size:0.85em;color:#cfe8da}
-  .speedControls{display:flex;gap:8px;align-items:center}
-  .invisible{display:none}
-  .shop{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
-  .shop .card{background:rgba(255,255,255,0.03);padding:8px;border-radius:6px}
-  .col{display:flex;flex-direction:column;gap:6px}
-  .skillsGrid{display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin-top:8px}
-  .skillBtn{background:rgba(255,255,255,0.02);padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);cursor:pointer;font-size:0.8em;white-space:pre-line}
-  .skillBtn.purchased{box-shadow:0 0 8px rgba(123,243,168,0.6);border-color:#7bf3a8}
-  .tabs{display:flex;gap:8px;margin:8px 0}
-  .tabBtn{padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.03);cursor:pointer}
-  .tabBtn.active{background:#7bf3a8;color:#003628}
-  .cardRow{display:flex;gap:8px;flex-wrap:wrap}
-  .muted{opacity:0.45}
+  :root{--bg:#071018;--p:rgba(255,255,255,.03);--p2:rgba(255,255,255,.05);--t:#fff;--m:#cfe8da;--a:#7bf3a8;--a2:#39d092;--d:#5b1010}
+  *{box-sizing:border-box} body{margin:0;padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--t)}
+  h1{margin:0 0 8px;color:var(--a)} .errorBanner{display:none;background:var(--d);padding:8px;border-radius:8px;margin-bottom:10px}
+  .stats,.panel,.card,.upgrade{background:var(--p);border:1px solid rgba(255,255,255,.05);border-radius:12px}
+  .stats,.panel{padding:10px;margin-bottom:10px} .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center} .right{margin-left:auto}
+  .small{font-size:.86em;color:var(--m)} .btn{border:0;border-radius:8px;padding:7px 10px;cursor:pointer}
+  .btn-primary{background:var(--a);color:#003628}.btn-secondary{background:var(--p2);color:var(--m)}.btn-danger{background:#6b2626;color:#fff}.btn.active{outline:2px solid var(--a)}
+  .invisible{display:none} .meter{height:14px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.06)} .fill{height:100%;width:100%;transform-origin:left;will-change:transform;background:linear-gradient(90deg,var(--a),var(--a2))}
+  .tabs{display:flex;gap:8px;margin:10px 0}.tabContent{display:none}.tabContent.active{display:block}
+  #upgradeList,.shopGrid,.challengeList,.genList{display:grid;gap:10px}.shopGrid,.challengeList,.genList{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))} #upgradeList{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
+  .upgrade,.card{padding:10px}.upgrade h3,.card h3{margin:0 0 4px;font-size:1rem}.upgrade .meter{margin:8px 0}
+  .skillTreeWrap{position:relative;min-height:1300px;overflow:hidden;padding:12px;background:var(--p);border-radius:12px;border:1px solid rgba(255,255,255,.05)}
+  #skillSvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.skillTree{position:relative;min-height:1300px}
+  .skillNode{position:absolute;transform:translate(-50%,-50%);width:90px;min-height:62px;padding:6px 8px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#fff;font-size:.72rem;line-height:1.1;text-align:center;cursor:pointer}
+  .skillNode.purchased{background:rgba(123,243,168,.16);border-color:var(--a);box-shadow:0 0 16px rgba(123,243,168,.28)} .skillNode.locked{opacity:.75} .skillNode .cost{display:block;margin-top:4px;color:var(--m)}
+  .challenge,.genTier{padding:10px}.challenge.active{border-color:var(--a)}.challenge.done{opacity:.65}
 </style>
 </head>
 <body>
-  <div id="error" class="errorBanner"></div>
-  <h1>💰 放置ゲーム — Prestige & Infinity (Step4 → Step5 準備)</h1>
-
-  <div class="stats">
-    所持金：<span id="money">0</span>　
-    秒あたり：<span id="rate">0</span>
+<div id="error" class="errorBanner"></div>
+<h1>💰 Idle — Generation / Infinity / Skill Tree</h1>
+<div class="stats">
+  <div class="row">
+    <div>所持金: <span id="money">0</span></div>
+    <div>秒あたり: <span id="rate">0</span></div>
     <div class="small" id="formula">(計算式)</div>
-    <div style="margin-top:8px">
-      無限メーター：
-      <div class="meter" style="display:inline-block;width:40%;margin-left:8px;vertical-align:middle">
-        <div id="inftyFill" class="fill" style="transform:scaleX(0)"></div>
-      </div>
-      <span id="inftyPct" class="small" style="margin-left:8px">0%</span>
-      <button id="gainInfinityBtn" class="btn btn-primary invisible" style="margin-left:10px">無限を得る</button>
-      <span class="small" style="margin-left:8px">無限ポイント(IP): <span id="inftyPoints">0</span></span>
-    </div>
   </div>
-
-  <div class="panel">
-    <div style="display:flex;gap:8px;align-items:center">
-      <button id="prestigeBtn" class="btn btn-primary invisible">✨ プレステージ</button>
-      <button id="resetBtn" class="btn btn-small">リセット（完全）</button>
-      <label class="small" style="margin-left:8px">Auto-buy:
-        <select id="autoQty">
-          <option value="1">×1</option><option value="10">×10</option><option value="100">×100</option><option value="max">×Max</option>
-        </select>
-        <input id="autoToggle" type="checkbox" style="margin-left:6px" />（プレステージ1回後に有効）
-      </label>
-    </div>
-
-    <div class="speedControls small" style="margin-left:auto">
-      倍速：
-      <select id="speedSelect">
-        <option value="1">1×</option>
-        <option value="2">2×</option>
-        <option value="3">3×</option>
-      </select>
-      <button id="speedDec" class="btn btn-small">-</button>
-      <button id="speedInc" class="btn btn-small">+</button>
-      <button id="pauseBtn" class="btn btn-small">一時停止</button>
-    </div>
+  <div style="margin-top:8px">
+    無限メーター:
+    <div class="meter" style="display:inline-block;width:42%;vertical-align:middle;margin:0 8px"><div id="infFill" class="fill" style="transform:scaleX(0)"></div></div>
+    <span id="infPct" class="small">0%</span>
+    <button id="gainInfinityBtn" class="btn btn-primary invisible" style="margin-left:10px">無限を得る</button>
+    <span class="small" style="margin-left:8px">IP: <span id="ip">0</span></span>
+    <span class="small" style="margin-left:8px">GP: <span id="gp">0</span></span>
+    <span class="small" style="margin-left:8px">GDP: <span id="gdp">0</span></span>
   </div>
-
-  <div class="tabs" role="tablist">
-    <button id="tabGen" class="tabBtn active">Generation</button>
-    <button id="tabInf" class="tabBtn">Infinity</button>
+</div>
+<div class="panel">
+  <div class="row">
+    <button id="genTabBtn" class="btn btn-primary active">Generation</button>
+    <button id="infTabBtn" class="btn btn-secondary">Infinity</button>
   </div>
+  <div class="right row">
+    <button id="prestigeBtn" class="btn btn-primary invisible">✨ プレステージ</button>
+    <select id="autoQty"><option value="1">×1</option><option value="10">×10</option><option value="100">×100</option><option value="max">×Max</option></select>
+    <label class="small"><input id="autoToggle" type="checkbox"> 自動購入</label>
+    <select id="speedSelect"><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option></select>
+    <button id="speedDec" class="btn btn-secondary">-</button><button id="speedInc" class="btn btn-secondary">+</button><button id="pauseBtn" class="btn btn-secondary">一時停止</button>
+    <button id="resetBtn" class="btn btn-danger">完全リセット</button>
+  </div>
+</div>
+<div id="genTab" class="tabContent active">
+  <div id="upgradeList"></div>
+  <div id="prestigeShop" style="margin-top:10px"></div>
+</div>
+<div id="infTab" class="tabContent">
+  <div class="panel"><div class="small">Infinityタブ: ジェネレーター、鉱山、スキルツリー、チャレンジ</div></div>
+  <div class="shopGrid">
+    <div class="card"><h3>Generators (G1〜G10)</h3><div class="small">G1はGPを生成。G2〜G10は下位ジェネレーターを増やす。</div><div id="generatorList" class="genList" style="margin-top:8px"></div></div>
+    <div class="card"><h3>鉱山</h3><div class="small">GDPを生成し、ジェネレーター効率を底上げします。</div><div id="mineBox" style="margin-top:8px"></div></div>
+  </div>
+  <div class="card" style="margin-top:10px"><h3>Infinity チャレンジ</h3><div class="small">9個。1つ達成でIP報酬が増え、9個達成でInfinity Break解放。</div><div id="challengeList" class="challengeList" style="margin-top:8px"></div></div>
+  <div class="card" style="margin-top:10px"><h3>無限スキルツリー</h3><div class="small">1番から順番に購入。50番で鉱山を解放。</div><div class="skillTreeWrap" style="margin-top:8px"><svg id="skillSvg"></svg><div id="skillTree" class="skillTree"></div></div></div>
+</div>
+<script>
+(() => {
+  function err(m){ const e=document.getElementById('error'); e.style.display='block'; e.textContent='エラー: '+m; console.error(m); }
+  try {
+    class BigNum {
+      constructor(m=0,e=0){ this.m=m; this.e=e; this._n(); }
+      static zero(){ return new BigNum(0,0); }
+      static fromNumber(n){ if(!isFinite(n)||n===0) return BigNum.zero(); const s=n<0?-1:1; n=Math.abs(n); const e=Math.floor(Math.log10(n)); return new BigNum(s*(n/Math.pow(10,e)), e); }
+      static fromMantExp(m,e){ return new BigNum(m,e); }
+      static fromObject(o){ if(!o||typeof o.m!=='number'||typeof o.e!=='number') return BigNum.zero(); return new BigNum(o.m,o.e); }
+      clone(){ return new BigNum(this.m,this.e); }
+      _n(){ if(!isFinite(this.m)||!isFinite(this.e)||this.m===0){ if(this.m===0){ this.m=0; this.e=0; return; } if(!isFinite(this.m)) this.m=this.m>0?9.9999999999999:-9.9999999999999; }
+        if(this.m===0){ this.e=0; return; } const s=this.m<0?-1:1; let a=Math.abs(this.m); const sh=Math.floor(Math.log10(a)); if(isFinite(sh)&&sh!==0){ a/=Math.pow(10,sh); this.e+=sh; } if(a>=10){ a/=10; this.e+=1; } this.m=s*a; }
+      toObject(){ return {m:this.m,e:this.e}; }
+      toNumberSafe(){ if(!isFinite(this.m)||!isFinite(this.e)) return NaN; if(this.e>15||this.e<-15) return this.m>0?Infinity:-Infinity; return this.m*Math.pow(10,this.e); }
+      toString(){ if(this.m===0) return '0'; if(this.e<=12&&this.e>=-6){ const v=this.toNumberSafe(); if(isFinite(v)) return v.toLocaleString(undefined,{maximumFractionDigits:2}); } return this.m.toFixed(3)+'e'+this.e; }
+      addInPlace(o){ if(typeof o==='number') o=BigNum.fromNumber(o); if(!(o instanceof BigNum)) return; if(this.m===0){ this.m=o.m; this.e=o.e; return; } if(o.m===0) return; const d=this.e-o.e; if(Math.abs(d)>15){ if(d>0) return; this.m=o.m; this.e=o.e; return; } if(d>=0) this.m += o.m*Math.pow(10,-d); else { this.m = o.m + this.m*Math.pow(10,d); this.e=o.e; } this._n(); }
+      subInPlace(o){ if(typeof o==='number') o=BigNum.fromNumber(o); if(!(o instanceof BigNum)) return; this.addInPlace(new BigNum(-o.m,o.e)); }
+      mulInPlace(o){ if(typeof o==='number'){ if(!isFinite(o)||o===0){ this.m=0; this.e=0; return; } o=BigNum.fromNumber(o); } if(!(o instanceof BigNum)) return; if(this.m===0||o.m===0){ this.m=0; this.e=0; return; } this.m*=o.m; this.e+=o.e; this._n(); }
+      mulByNumber(n){ if(typeof n!=='number') return; if(!isFinite(n)||n===0){ this.m=0; this.e=0; return; } this.m*=n; this._n(); }
+      gteBig(b){ if(!(b instanceof BigNum)) b=BigNum.fromObject(b); if(this.m===0&&b.m===0) return true; if(this.e!==b.e) return this.e>b.e; return Math.abs(this.m)>=Math.abs(b.m); }
+      gteNumber(n){ return this.gteBig(BigNum.fromNumber(n)); }
+    }
 
-  <div id="upgradeContainer"></div>
-  <div id="prestigeShop" class="shop" style="display:block"></div>
-  <div id="infinityShop" class="shop" style="display:none"></div>
+    const STORAGE='idle_complete_v1'; const INF_TARGET=BigNum.fromMantExp(1.8,308); const INF_START=BigNum.fromMantExp(1,307);
+    const state={ money:BigNum.zero(), baseIncome:BigNum.fromNumber(1), upgrades:[], prestigePoints:0, prestigeCount:0, lastPrestigeScore:BigNum.zero(), prestigeMultExp:0,
+      infinityPoints:0, generatorPoints:0, goldenParticles:0, minesCount:0, infinityBreakUnlocked:false, speedMultiplier:1, paused:false, costBaseMultVar:1.15,
+      globalPrestige:{mAdd:0,rMul:1,costMul:1}, generators:Array.from({length:10},()=>({count:0,progress:0})), skillNodes:[], challenges:[], skillBoost:{rateMult:1,multInc:1,costMult:1,genEffMult:1,gpEffMult:1,mineUnlock:false}, challengeBoost:1 };
+    const U=[['収入アップ',0.9,1.18,12],['効率アップ',0.6,1.16,40],['自動販売機',0.45,1.14,120],['銀行投資',0.3,1.12,520],['AI生成工場',0.18,1.10,2200],['マーケティング',0.14,1.09,12000],['研究所',0.11,1.085,60000],['惑星開発',0.08,1.07,250000],['量子サーバー',0.05,1.055,1200000],['次元コア',0.02,1.04,6000000]];
+    const skillData = (()=>{ const arr=[]; const rings=[1,6,10,12,21], rads=[0,140,240,360,520]; let id=0; for(let ring=0;ring<rings.length;ring++){ const cnt=rings[ring]; for(let i=0;i<cnt;i++){ id++; const ang=cnt===1?-90:(-120+(240*(i/(cnt-1)))); const x=700+rads[ring]*Math.cos(ang*Math.PI/180), y=560+rads[ring]*Math.sin(ang*Math.PI/180); let effect; if(id<=10) effect={type:'rateMult',value:1+0.02*id}; else if(id<=20) effect={type:'multInc',value:1+0.03*(id-10)}; else if(id<=30) effect={type:'costMult',value:Math.max(0.70,0.98-0.004*(id-20))}; else if(id<=40) effect={type:'genEff',value:1+0.04*(id-30)}; else if(id<=49) effect={type:'gpEff',value:1+0.05*(id-40)}; else effect={type:'mineUnlock',value:true}; arr.push({id:'S'+id,tier:id,name:`${id}. ${['開門','m+','速度','資源','効率','鋭化','加速','軽量','節約','拡張'][ring]}`,x,y,effect,cost:Math.ceil(2+Math.pow(1.20,id-1)),purchased:false}); } } return arr; })();
+    const challengeData = ['厳格な節約','発電制限','ノーヘルプ','低速世界','高コスト','高圧縮','無限遮断','拡張訓練','完全試練'].map((n,i)=>({id:'C'+(i+1),name:n,desc:'達成でIP+2 / 9個でBreak解放',done:false,active:false,req:0}));
 
-  <!-- スクリプト分割 -->
-  <script src="./common.js"></script>
-  <script src="./gen.js"></script>
-  <script src="./inf.js"></script>
+    function initData(){ state.upgrades = U.map(([name,rate,speedMult,baseCost]) => ({name,baseRate:rate,rate:rate,mult:0,speedMult,baseCost,level:0,progress:0,ascendCount:0,purchasePenalty:0})); state.skillNodes=skillData.map(x=>({...x})); state.challenges=challengeData.map(x=>({...x})); }
+    function fmt(v){ if(typeof v==='number'){ if(!isFinite(v)) return 'Infinity'; if(Math.abs(v)>=1e15) return v.toExponential(2); if(Math.abs(v)>=1e9) return (v/1e9).toFixed(2)+'B'; if(Math.abs(v)>=1e6) return (v/1e6).toFixed(2)+'M'; return Math.floor(v).toLocaleString(); } return String(v); }
+    function log10(b){ if(!(b instanceof BigNum)) b=BigNum.fromObject(b); if(b.m===0) return -Infinity; return b.e + Math.log10(Math.abs(b.m)); }
+    function cap(u){ return 100 + (u.ascendCount||0)*10; }
+    function sanitizeUpgrades(){ state.upgrades.forEach((u,i)=>{ const t=U[i]; if(!u) state.upgrades[i]={name:t[0],baseRate:t[1],rate:t[1],mult:0,speedMult:t[2],baseCost:t[3],level:0,progress:0,ascendCount:0,purchasePenalty:0}; const x=state.upgrades[i]; x._rateBN=x._rateBN?BigNum.fromObject(x._rateBN):BigNum.fromNumber(x.rate||x.baseRate); x._multBN=x._multBN?BigNum.fromObject(x._multBN):BigNum.fromNumber(x.mult||0); x._baseCostBN=x._baseCostBN?BigNum.fromObject(x._baseCostBN):BigNum.fromNumber(x.baseCost||t[3]); x.level=Number.isFinite(+x.level)?Math.max(0,Math.floor(+x.level)):0; x.progress=Number.isFinite(+x.progress)?+x.progress:0; x.ascendCount=Number.isFinite(+x.ascendCount)?+x.ascendCount:0; x.purchasePenalty=Number.isFinite(+x.purchasePenalty)?+x.purchasePenalty:0; }); }
+    function computeSkillBoost(){ state.skillBoost={rateMult:1,multInc:1,costMult:1,genEffMult:1,gpEffMult:1,mineUnlock:false}; for(const n of state.skillNodes){ if(!n.purchased) continue; const v=n.effect.value; if(n.effect.type==='rateMult') state.skillBoost.rateMult*=v; else if(n.effect.type==='multInc') state.skillBoost.multInc*=v; else if(n.effect.type==='costMult') state.skillBoost.costMult*=v; else if(n.effect.type==='genEff') state.skillBoost.genEffMult*=v; else if(n.effect.type==='gpEff') state.skillBoost.gpEffMult*=v; else if(n.effect.type==='mineUnlock') state.skillBoost.mineUnlock=true; } }
+    function challengeBoost(){ return Math.pow(2, state.challenges.filter(c=>c.done).length); }
+    function save(){ const d={ money:state.money.toObject(), baseIncome:state.baseIncome.toObject(), upgrades:state.upgrades.map(u=>({name:u.name,baseRate:u.baseRate,rateBN:u._rateBN.toObject(),multBN:u._multBN.toObject(),baseCostBN:u._baseCostBN.toObject(),level:u.level,progress:u.progress,ascendCount:u.ascendCount,purchasePenalty:u.purchasePenalty})), prestigePoints:state.prestigePoints, prestigeCount:state.prestigeCount, lastPrestigeScore:state.lastPrestigeScore.toObject(), prestigeMultExp:state.prestigeMultExp, infinityPoints:state.infinityPoints, generatorPoints:state.generatorPoints, goldenParticles:state.goldenParticles, minesCount:state.minesCount, infinityBreakUnlocked:state.infinityBreakUnlocked, speedMultiplier:state.speedMultiplier, paused:state.paused, costBaseMultVar:state.costBaseMultVar, globalPrestige:state.globalPrestige, generators:state.generators, skillNodes:state.skillNodes.map(n=>({id:n.id,purchased:n.purchased})), challenges:state.challenges.map(c=>({id:c.id,done:c.done,active:c.active})) }; localStorage.setItem(STORAGE, JSON.stringify(d)); }
+    function load(){ const raw=localStorage.getItem(STORAGE); if(!raw) return; try{ const d=JSON.parse(raw); if(d.money) state.money=BigNum.fromObject(d.money); if(d.baseIncome) state.baseIncome=BigNum.fromObject(d.baseIncome); if(Array.isArray(d.upgrades)&&d.upgrades.length===state.upgrades.length) state.upgrades=d.upgrades.map((s,i)=>({...JSON.parse(JSON.stringify(state.upgrades[i]||{})),...s,_rateBN:s.rateBN?BigNum.fromObject(s.rateBN):BigNum.fromNumber(s.rate||U[i][1]),_multBN:s.multBN?BigNum.fromObject(s.multBN):BigNum.fromNumber(s.mult||0),_baseCostBN:s.baseCostBN?BigNum.fromObject(s.baseCostBN):BigNum.fromNumber(s.baseCost||U[i][3])})); state.prestigePoints=+d.prestigePoints||0; state.prestigeCount=+d.prestigeCount||0; if(d.lastPrestigeScore) state.lastPrestigeScore=BigNum.fromObject(d.lastPrestigeScore); state.prestigeMultExp=+d.prestigeMultExp||0; state.infinityPoints=+d.infinityPoints||0; state.generatorPoints=+d.generatorPoints||0; state.goldenParticles=+d.goldenParticles||0; state.minesCount=+d.minesCount||0; state.infinityBreakUnlocked=!!d.infinityBreakUnlocked; state.speedMultiplier=Math.max(1,Math.min(3,Math.round(+d.speedMultiplier||1))); state.paused=!!d.paused; state.costBaseMultVar=+d.costBaseMultVar||1.15; if(d.globalPrestige) state.globalPrestige={mAdd:+d.globalPrestige.mAdd||0,rMul:+d.globalPrestige.rMul||1,costMul:+d.globalPrestige.costMul||1}; if(Array.isArray(d.generators)&&d.generators.length===10) state.generators=d.generators.map(g=>({count:Math.max(0,Math.floor(+g.count||0)),progress:+g.progress||0})); if(Array.isArray(d.skillNodes)&&d.skillNodes.length===state.skillNodes.length){ const m=new Map(d.skillNodes.map(x=>[x.id,!!x.purchased])); state.skillNodes.forEach(n=>n.purchased=m.get(n.id)||false); } if(Array.isArray(d.challenges)&&d.challenges.length===state.challenges.length){ const m=new Map(d.challenges.map(x=>[x.id,{done:!!x.done,active:!!x.active}])); state.challenges.forEach(c=>{ const x=m.get(c.id); if(x){ c.done=x.done; c.active=x.active; } }); } }catch(e){ console.warn(e); } }
+    function resetGenerationOnly(){ state.money=BigNum.zero(); state.baseIncome=BigNum.fromNumber(1); state.upgrades=U.map(([name,rate,speedMult,baseCost])=>({name,baseRate:rate,rate,mult:0,speedMult,baseCost,level:0,progress:0,ascendCount:0,purchasePenalty:0})); state.prestigeMultExp=0; state.costBaseMultVar=1.15; state.globalPrestige={mAdd:0,rMul:1,costMul:1}; sanitizeUpgrades(); computeSkillBoost(); save(); }
+    function resetAll(){ localStorage.removeItem(STORAGE); initData(); state.money=BigNum.zero(); state.baseIncome=BigNum.fromNumber(1); state.prestigePoints=0; state.prestigeCount=0; state.lastPrestigeScore=BigNum.zero(); state.prestigeMultExp=0; state.infinityPoints=0; state.generatorPoints=0; state.goldenParticles=0; state.minesCount=0; state.infinityBreakUnlocked=false; state.speedMultiplier=1; state.paused=false; state.costBaseMultVar=1.15; state.globalPrestige={mAdd:0,rMul:1,costMul:1}; state.generators=Array.from({length:10},()=>({count:0,progress:0})); computeSkillBoost(); renderTree(); renderAll(true); save(); }
+    function prestigeBoost(){ return Math.exp(Math.min(700, 0.01*Math.sqrt(Math.max(0,state.prestigePoints)) + state.prestigeMultExp)); }
+    function infPct(b){ if(!(b instanceof BigNum)) b=BigNum.fromObject(b); if(b.m===0) return 0; const l=log10(b), s=log10(INF_START), t=log10(INF_TARGET); if(l<s) return 0; if(l>=t) return 100; return Math.max(0, Math.min(100, (l-s)/(t-s)*100)); }
+    function greater(a,b){ if(!(a instanceof BigNum)) a=BigNum.fromObject(a); if(!(b instanceof BigNum)) b=BigNum.fromObject(b); if(a.e!==b.e) return a.e>b.e; return Math.abs(a.m)>Math.abs(b.m); }
+    function upgradeCost(u,extra=0){ const c=u._baseCostBN.clone(); c.mulByNumber(Math.pow(state.costBaseMultVar, Math.max(0,u.level+extra))); c.mulByNumber(1+(u.purchasePenalty||0)); c.mulByNumber(state.globalPrestige.costMul); c.mulByNumber(state.skillBoost.costMult); return c; }
+    function upgradeMultiplierBN(){ let total=BigNum.fromNumber(1); state.upgrades.forEach(u=>{ const f=BigNum.fromNumber(1); f.addInPlace(u._multBN); f.addNumber(0.02*(u.ascendCount||0)); f.addNumber(0.02*state.globalPrestige.mAdd); total.mulInPlace(f); }); return total; }
+    function getMultiplierIncrementBig(u){ const base=0.005*Math.pow(1+(u.level||0),0.38); const gp=1+state.generatorPoints*0.02; const gdp=1+state.goldenParticles*0.01; return BigNum.fromNumber(Math.min(base*gp*gdp*state.skillBoost.multInc, 1e18)); }
+    function buyUpgrade(idx,qty,silent=false){ const u=state.upgrades[idx]; const lim=cap(u); if(u.level>=lim){ if(!silent) alert('このアップグレードは最大Lvです'); return; } let n=qty==='max' ? lim-u.level : Math.min(Number(qty)||1, lim-u.level); if(n<=0) return; let cost=BigNum.zero(); for(let k=0;k<n;k++) cost.addInPlace(upgradeCost(u,k)); if(!state.money.gteBig(cost)){ if(!silent) alert('お金が足りません'); return; } state.money.subInPlace(cost); u._rateBN.mulByNumber(Math.pow(Math.max(1,u.speedMult), n*0.12)); u.level += n; save(); renderAll(true); }
+    function tryAscend(idx){ const u=state.upgrades[idx]; if(u.level<cap(u)){ alert('Lv上限に到達してから昇天可能です'); return; } if(!confirm(`${u.name} を昇天しますか？`)) return; u.ascendCount += 1; u.purchasePenalty += 0.25; u.level=0; u.progress=0; u._rateBN=BigNum.fromNumber(u.baseRate||1); u._multBN=BigNum.zero(); save(); renderAll(true); }
+    function prestigePointsForScore(m){ const l=log10(m); return (isFinite(l) && l>=20) ? Math.floor(l-20)+1 : 0; }
+    function doPrestige(){ const can=state.money.gteNumber(1e20) && (state.prestigeCount===0 || greater(state.money,state.lastPrestigeScore)); if(!can){ alert('プレステージ条件を満たしていません'); return; } if(!confirm('プレステージを実行しますか？')) return; const pts=prestigePointsForScore(state.money); state.prestigePoints += pts; state.prestigeCount += 1; state.lastPrestigeScore = state.money.clone(); state.prestigeMultExp += 0.01*Math.max(1, Math.floor(log10(state.money)-20)); resetGenerationOnly(); state.prestigePoints += pts; save(); renderAll(true); alert(`プレステージ完了: +${pts} PP`); }
+    function genOutputPenalty(){ return 1 / (1 + Math.log10(2 + state.generatorPoints + 1) * 0.15); }
+    function stepGenerators(dt){ state.generatorPoints += (state.generators[0].count||0) * 0.001 * state.skillBoost.gpEffMult * dt; const eff=genOutputPenalty() * state.skillBoost.genEffMult * (1+state.minesCount*0.05); for(let t=1;t<10;t++){ const g=state.generators[t]; if(!g||g.count<=0) continue; g.progress += 0.1 * g.count * eff * dt; while(g.progress>=1){ g.progress -= 1; state.generators[t-1].count += 1; } } state.goldenParticles += state.minesCount * 0.02 * state.skillBoost.gpEffMult * dt; }
+    function gainInfinity(){ if(!state.money.gteBig(INF_TARGET)){ alert('まだ無限に到達していません'); return; } if(!confirm('無限を取得しますか？')) return; let reward=1 + Math.max(1, Math.floor((log10(state.money)-log10(INF_TARGET))*2)); if(state.infinityBreakUnlocked) reward += Math.max(0, Math.floor((log10(state.money)-log10(INF_TARGET))*4)); state.infinityPoints += reward; resetGenerationOnly(); state.infinityPoints += reward; save(); renderAll(true); alert(`IP +${reward}`); }
+    function purchaseSkillNode(idx){ const n=state.skillNodes[idx]; if(n.purchased){ alert(`${n.id}\n${n.name}\n効果: ${n.effect.type} × ${n.effect.value}`); return; } if(idx>0 && !state.skillNodes[idx-1].purchased){ alert('順番に購入してください'); return; } if(state.prestigePoints < n.cost){ alert('PPが足りません'); return; } state.prestigePoints -= n.cost; n.purchased=true; computeSkillBoost(); save(); renderAll(true); }
+    function renderTree(){ const tree=document.getElementById('skillTree'), svg=document.getElementById('skillSvg'); tree.innerHTML=''; svg.innerHTML=''; svg.setAttribute('viewBox','0 0 1400 1300'); for(let i=1;i<state.skillNodes.length;i++){ const a=state.skillNodes[i-1], b=state.skillNodes[i]; const line=document.createElementNS('http://www.w3.org/2000/svg','line'); line.setAttribute('x1',a.x); line.setAttribute('y1',a.y); line.setAttribute('x2',b.x); line.setAttribute('y2',b.y); line.setAttribute('stroke','rgba(123,243,168,.2)'); line.setAttribute('stroke-width','3'); svg.appendChild(line); } state.skillNodes.forEach((n,i)=>{ const btn=document.createElement('button'); btn.className='skillNode'+(n.purchased?' purchased':'')+((i===0||state.skillNodes[i-1].purchased)?'':' locked'); btn.style.left=n.x+'px'; btn.style.top=n.y+'px'; btn.innerHTML=`${n.name}<span class="cost">${n.purchased?'購入済':'Cost '+n.cost+' PP'}</span>`; btn.onclick=()=>purchaseSkillNode(i); tree.appendChild(btn); }); }
+    function genBaseCost(i){ return [1,3,10,30,100,300,1000,3000,10000,30000][i]; }
+    function genCostForPurchase(tier,qty){ let total=0, cur=state.generators[tier].count||0; for(let k=0;k<qty;k++) total += Math.ceil(genBaseCost(tier) * Math.pow(1.80, cur+k)); return total; }
+    function buyGenerator(tier,qty){ qty=Number(qty)||1; if(qty<=0) return; const cost=genCostForPurchase(tier,qty); if(state.infinityPoints < cost){ alert('IPが足りません'); return; } state.infinityPoints -= cost; state.generators[tier].count += qty; save(); renderAll(true); }
+    function mineCost(qty){ let total=0, cur=state.minesCount; for(let i=0;i<qty;i++) total += Math.ceil(5*Math.pow(2.25, cur+i)); return total; }
+    function buyMine(qty){ qty=Number(qty)||1; if(qty<=0) return; if(!state.skillBoost.mineUnlock){ alert('鉱山はスキルツリー50番で解放されます'); return; } const cost=mineCost(qty); if(state.infinityPoints < cost){ alert('IPが足りません'); return; } state.infinityPoints -= cost; state.minesCount += qty; save(); renderAll(true); }
+    function renderGeneration(){ const list=document.getElementById('upgradeList'); list.innerHTML=''; state.upgrades.forEach((u,i)=>{ const d=document.createElement('div'); d.className='upgrade'; d.innerHTML=`<h3>${i+1}. ${u.name} <span class="small">Lv ${u.level}/${cap(u)}</span></h3><div class="small">昇天回数: ${u.ascendCount}</div><div class="small">永続: m ${u._multBN.toString()} / r ${u.rate.toString()} / c ${u.baseCost.toString()}</div><div class="small">メーター速度: ${u._rateBN.toString()}/s</div><div class="meter"><div class="fill" style="transform:scaleX(${Math.min(1,u.progress/100)})"></div></div><div class="row"><button class="btn btn-primary">購入 x1</button><button class="btn btn-secondary">x10</button><button class="btn btn-secondary">x100</button><button class="btn btn-secondary">xMax</button><button class="btn btn-secondary ${u.level>=cap(u)?'':'invisible'}">昇天</button></div>`; const bs=d.querySelectorAll('button'); bs[0].onclick=()=>buyUpgrade(i,1); bs[1].onclick=()=>buyUpgrade(i,10); bs[2].onclick=()=>buyUpgrade(i,100); bs[3].onclick=()=>buyUpgrade(i,'max'); bs[4].onclick=()=>tryAscend(i); list.appendChild(d); }); renderPrestigeShop(); }
+    function renderPrestigeShop(){ const el=document.getElementById('prestigeShop'); el.innerHTML=''; const head=document.createElement('div'); head.className='card'; head.innerHTML=`<h3>Prestige Shop</h3><div class="small">PP: ${fmt(state.prestigePoints)} / 回数: ${state.prestigeCount}</div>`; el.appendChild(head); const items=[{t:'全アップグレード m +0.01',c:2,a(){ state.globalPrestige.mAdd += 0.01; }},{t:'全アップグレード r ×1.05',c:3,a(){ state.globalPrestige.rMul *= 1.05; }},{t:'全アップグレード コスト -10%',c:4,a(){ state.globalPrestige.costMul *= 0.90; }},{t:'コスト成長率 -0.01',c:6,a(){ state.costBaseMultVar = Math.max(1.01, state.costBaseMultVar - 0.01); }}]; items.forEach(it=>{ const c=document.createElement('div'); c.className='card'; c.innerHTML=`<h3>${it.t}</h3><div class="small">Cost: ${it.c} PP</div>`; const b=document.createElement('button'); b.className='btn btn-secondary'; b.textContent='Buy'; b.onclick=()=>{ if(state.prestigePoints < it.c){ alert('PPが足りません'); return; } state.prestigePoints -= it.c; it.a(); save(); renderAll(true); }; c.appendChild(b); el.appendChild(c); }); }
+    function renderInfinity(){ const gl=document.getElementById('generatorList'); gl.innerHTML=''; for(let t=0;t<10;t++){ const g=state.generators[t]; const d=document.createElement('div'); d.className='upgrade genTier'; d.innerHTML=`<strong>G${t+1}</strong><div class="small">所持: ${g.count}</div><div class="small">次コスト: ${genCostForPurchase(t,1)} IP</div><div class="row"><button class="btn btn-secondary">Buy ×1</button><button class="btn btn-secondary">Buy ×5</button></div>`; const bs=d.querySelectorAll('button'); bs[0].onclick=()=>buyGenerator(t,1); bs[1].onclick=()=>buyGenerator(t,5); gl.appendChild(d); } const mine=document.getElementById('mineBox'); mine.innerHTML=`<div class="small">所持: ${state.minesCount}</div><div class="small">次コスト: ${mineCost(1)} IP</div><div class="row" style="margin-top:6px"><button id="m1" class="btn btn-secondary">Buy ×1</button><button id="m5" class="btn btn-secondary">Buy ×5</button></div>`; mine.querySelector('#m1').onclick=()=>buyMine(1); mine.querySelector('#m5').onclick=()=>buyMine(5); const ch=document.getElementById('challengeList'); ch.innerHTML=''; state.challenges.forEach(c=>{ const d=document.createElement('div'); d.className='upgrade challenge'+(c.active?' active':'')+(c.done?' done':''); d.innerHTML=`<h3>${c.name}</h3><div class="small">${c.desc}</div><div class="small">${c.done?'達成済み':c.active?'実行中':'未達成'}</div><div class="row" style="margin-top:6px"><button class="btn btn-secondary">${c.active?'停止':'開始'}</button></div>`; d.querySelector('button').onclick=()=>{ if(c.active) stopChallenge(c.id); else startChallenge(c.id); }; ch.appendChild(d); }); renderTree(); }
+    function startChallenge(id){ const c=state.challenges.find(x=>x.id===id); if(!c||c.active) return; if(state.infinityPoints < c.req){ alert('必要IPが足りません'); return; } if(!confirm(`${c.name} を開始しますか？`)) return; state.challenges.forEach(x=>x.active=false); c.active=true; resetGenerationOnly(); c.active=true; save(); renderAll(true); }
+    function stopChallenge(id){ const c=state.challenges.find(x=>x.id===id); if(!c||!c.active) return; if(!confirm(`${c.name} を終了しますか？`)) return; c.active=false; save(); renderAll(true); }
+    function stepChallengeAuto(){ const active=state.challenges.find(c=>c.active); if(active && state.money.gteBig(INF_TARGET)){ active.active=false; active.done=true; state.infinityPoints += 2; if(state.challenges.every(c=>c.done)) state.infinityBreakUnlocked=true; resetGenerationOnly(); state.infinityPoints += 2; save(); } }
+    function computeCurrentRate(){ const b=state.baseIncome.clone(); b.mulInPlace(upgradeMultiplierBN()); b.mulByNumber(prestigeBoost()); b.mulByNumber(challengeBoost()); return b; }
+    function updateDom(){ const rate=computeCurrentRate(); const rateNum=rate.toNumberSafe(); document.getElementById('money').textContent = state.money.toString(); document.getElementById('rate').textContent = (isFinite(rateNum) && rate.e<=16) ? rateNum.toFixed(2) : rate.toString(); document.getElementById('ip').textContent=fmt(state.infinityPoints); document.getElementById('gp').textContent=state.generatorPoints.toFixed(4); document.getElementById('gdp').textContent=state.goldenParticles.toFixed(4); const p=infPct(state.money); document.getElementById('infFill').style.transform=`scaleX(${p/100})`; document.getElementById('infPct').textContent=p.toFixed(4)+'%'; document.getElementById('gainInfinityBtn').classList.toggle('invisible', !state.money.gteBig(INF_TARGET)); document.getElementById('prestigeBtn').classList.toggle('invisible', !(state.money.gteNumber(1e20) && (state.prestigeCount===0 || greater(state.money,state.lastPrestigeScore)))); document.getElementById('speedSelect').value=String(state.speedMultiplier); document.getElementById('pauseBtn').textContent=state.paused ? '再開':'一時停止'; document.getElementById('genTabBtn').classList.toggle('active', currentTab==='gen'); document.getElementById('infTabBtn').classList.toggle('active', currentTab==='inf'); document.getElementById('genTab').classList.toggle('active', currentTab==='gen'); document.getElementById('infTab').classList.toggle('active', currentTab==='inf'); document.getElementById('prestigeShop').style.display = currentTab==='gen' ? '' : 'none'; document.getElementById('formula').textContent = `収入 = baseIncome × upgrade倍率 × Prestige倍率 （倍速:${state.speedMultiplier}${state.paused?' 停止中':''}）`; }
+    function renderAll(){ computeSkillBoost(); updateDom(); if(currentTab==='gen') renderGeneration(); else renderInfinity(); save(); }
+    let currentTab='gen'; function setTab(t){ currentTab=t; renderAll(); }
+    document.getElementById('genTabBtn').onclick=()=>setTab('gen'); document.getElementById('infTabBtn').onclick=()=>setTab('inf');
+    document.getElementById('prestigeBtn').onclick=()=>doPrestige(); document.getElementById('gainInfinityBtn').onclick=()=>gainInfinity(); document.getElementById('resetBtn').onclick=()=>{ if(confirm('本当に全てをリセットしますか？')) resetAll(); };
+    document.getElementById('speedSelect').onchange=e=>{ state.speedMultiplier=Math.max(1,Math.min(3,Math.round(+e.target.value||1))); save(); renderAll(); };
+    document.getElementById('speedInc').onclick=()=>{ state.speedMultiplier=Math.max(1,Math.min(3,state.speedMultiplier+1)); renderAll(); };
+    document.getElementById('speedDec').onclick=()=>{ state.speedMultiplier=Math.max(1,Math.min(3,state.speedMultiplier-1)); renderAll(); };
+    document.getElementById('pauseBtn').onclick=()=>{ state.paused=!state.paused; renderAll(); };
+    window.addEventListener('keydown',(e)=>{ if(e.key==='['){ state.speedMultiplier=Math.max(1,Math.min(3,state.speedMultiplier-1)); renderAll(); e.preventDefault(); } else if(e.key===']'){ state.speedMultiplier=Math.max(1,Math.min(3,state.speedMultiplier+1)); renderAll(); e.preventDefault(); } else if(e.code==='Space'){ state.paused=!state.paused; renderAll(); e.preventDefault(); } });
+    setInterval(()=>{ try{ if(!document.getElementById('autoToggle').checked) return; if(state.prestigeCount<1) return; const qty=document.getElementById('autoQty').value; const order=state.upgrades.map((u,i)=>({i,c:upgradeCost(u)})).sort((a,b)=>a.c.e!==b.c.e ? a.c.e-b.c.e : Math.abs(a.c.m)-Math.abs(b.c.m)); for(const e of order){ if(state.upgrades[e.i].level>=cap(state.upgrades[e.i])) continue; if(state.money.gteBig(e.c)){ buyUpgrade(e.i, qty, true); break; } } }catch(err){ console.warn(err); } }, 800);
+
+    function simulateStep(dt){ const s=state.speedMultiplier; for(const u of state.upgrades){ let rate=u._rateBN.toNumberSafe(); if(!isFinite(rate)||rate<=0) rate=u.baseRate||0.01; rate *= state.globalPrestige.rMul * state.skillBoost.rateMult * challengeBoost(); u.progress += rate * dt * 100 * s; if(u.progress>1e9) u.progress=1e9; if(u.progress>=100){ const done=Math.min(1000000,Math.floor(u.progress/100)); u.progress -= done*100; const inc=getMultiplierIncrementBig(u); inc.mulByNumber(done); u._multBN.addInPlace(inc); } }
+      const income=state.baseIncome.clone(); income.mulInPlace(upgradeMultiplierBN()); income.mulByNumber(prestigeBoost()); income.mulByNumber(challengeBoost()); income.mulByNumber(dt*s); state.money.addInPlace(income); if(!state.infinityBreakUnlocked && state.money.gteBig(INF_TARGET)) state.money=INF_TARGET.clone(); stepGenerators(dt); }
+    function tick(now){ if(!tick.last) tick.last=now; let dt=(now-tick.last)/1000; tick.last=now; if(!isFinite(dt)||dt<0) dt=0; if(dt>0.5) dt=0.5; if(!state.paused){ tick.acc=(tick.acc||0)+dt; if(tick.acc>0.5) tick.acc=0.5; const fixed=0.05; while(tick.acc>=fixed){ simulateStep(fixed); tick.acc-=fixed; } } stepChallengeAuto(); updateDom(); if(currentTab==='gen') renderGeneration(); else renderInfinity(); requestAnimationFrame(tick); }
+
+    initData(); load(); sanitizeUpgrades(); computeSkillBoost(); renderTree(); renderAll(); setTab('gen'); requestAnimationFrame(tick); window.addEventListener('beforeunload', save);
+    (function(){ const m=location.search.match(/\?=(.+)/); if(!m) return; const [k,v]=m[1].split(':'); if(k==='money') state.money=BigNum.fromNumber(Number(v||1e10)); if(k==='ip') state.infinityPoints += Number(v||1); if(k==='gp') state.generatorPoints += Number(v||1); if(k==='break') state.infinityBreakUnlocked=true; if(k==='skill'){ const i=Math.max(1,Math.min(state.skillNodes.length,Number(v||1)))-1; state.skillNodes[i].purchased=true; computeSkillBoost(); } save(); renderAll(); })();
+
+  } catch(e){ err(e && e.message ? e.message : String(e)); }
+})();
+</script>
 </body>
 </html>
