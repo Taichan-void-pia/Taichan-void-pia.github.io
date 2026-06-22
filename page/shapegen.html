@@ -1,0 +1,765 @@
+<!DOCTYPE html><html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Minecraft Particle Shape Generator</title>
+  <style>
+    :root {
+      --bg: #07111b;
+      --panel: rgba(255,255,255,0.06);
+      --panel2: rgba(255,255,255,0.09);
+      --text: #eef6ff;
+      --muted: rgba(238,246,255,0.72);
+      --line: rgba(255,255,255,0.14);
+      --accent: #7cc7ff;
+      --accent2: #a9ffcf;
+      --danger: #ff8a8a;
+      --shadow: 0 20px 50px rgba(0,0,0,0.35);
+      --radius: 18px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(124,199,255,0.15), transparent 32%),
+        radial-gradient(circle at top right, rgba(169,255,207,0.12), transparent 24%),
+        linear-gradient(180deg, #07111b 0%, #08131f 100%);
+      color: var(--text);
+      font-family: var(--sans);
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 390px 1fr;
+      gap: 18px;
+      padding: 18px;
+      min-height: 100vh;
+    }
+    .panel, .stage {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .panel { padding: 16px; overflow: auto; }
+    .stage {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      min-width: 0;
+      overflow: hidden;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.25rem;
+      letter-spacing: 0.02em;
+    }
+    .sub {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 0.94rem;
+    }
+    .section {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 0.98rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .grid3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    label {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(5,10,16,0.65);
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+      outline: none;
+    }
+    textarea {
+      min-height: 124px;
+      resize: vertical;
+      font-family: var(--mono);
+      font-size: 0.84rem;
+      line-height: 1.45;
+      white-space: pre;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: rgba(124,199,255,0.55);
+      box-shadow: 0 0 0 3px rgba(124,199,255,0.12);
+    }
+    .row { margin-bottom: 10px; }
+    .row:last-child { margin-bottom: 0; }
+    .inline {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .inline > * { flex: 1 1 0; }
+    .inline .tight { flex: 0 0 auto; }
+    .btns {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .btn {
+      cursor: pointer;
+      font-weight: 650;
+      transition: transform .08s ease, border-color .15s ease, background .15s ease;
+    }
+    .btn:hover { transform: translateY(-1px); border-color: rgba(124,199,255,0.48); }
+    .btn.primary {
+      background: linear-gradient(180deg, rgba(124,199,255,0.24), rgba(124,199,255,0.12));
+    }
+    .btn.good {
+      background: linear-gradient(180deg, rgba(169,255,207,0.18), rgba(169,255,207,0.08));
+    }
+    .btn.warn {
+      background: linear-gradient(180deg, rgba(255,138,138,0.18), rgba(255,138,138,0.08));
+    }
+    .canvasWrap {
+      position: relative;
+      min-height: 520px;
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,0.06), transparent 55%),
+        linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .overlay {
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(5,10,16,0.55);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--muted);
+      font-size: 0.88rem;
+      pointer-events: none;
+    }
+    .footer {
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.88rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .status {
+      font-family: var(--mono);
+      color: var(--accent2);
+    }
+    .muted { color: var(--muted); }
+    .small {
+      font-size: 0.84rem;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .hide { display: none !important; }
+    .error {
+      color: var(--danger);
+      font-size: 0.84rem;
+      margin-top: 8px;
+      white-space: pre-wrap;
+    }
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 1fr; }
+      .canvasWrap { min-height: 440px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel">
+      <h1>Minecraft Particle Shape Generator</h1>
+      <p class="sub">正n角形・円・自由な媒介変数を3Dで描画して、Minecraft の <span style="font-family:var(--mono)">mcfunction</span> 用 particle 座標へ書き出します。</p><div class="section">
+    <h2>形の種類</h2>
+    <div class="row">
+      <label for="mode">モード</label>
+      <select id="mode">
+        <option value="polygon">正n角形</option>
+        <option value="circle">円</option>
+        <option value="param">媒介変数曲線</option>
+      </select>
+    </div>
+    <div id="polygonFields">
+      <div class="grid">
+        <div class="row">
+          <label for="sides">n</label>
+          <input id="sides" type="number" min="3" max="500" step="1" value="6" />
+        </div>
+        <div class="row">
+          <label for="subdivisions">辺ごとの点</label>
+          <input id="subdivisions" type="number" min="1" max="200" step="1" value="24" />
+        </div>
+      </div>
+    </div>
+    <div id="circleFields" class="hide">
+      <div class="grid">
+        <div class="row">
+          <label for="circleSegments">分割数</label>
+          <input id="circleSegments" type="number" min="3" max="1000" step="1" value="180" />
+        </div>
+        <div class="row">
+          <label for="circleClosed">閉曲線</label>
+          <select id="circleClosed"><option value="1">はい</option><option value="0">いいえ</option></select>
+        </div>
+      </div>
+    </div>
+    <div id="paramFields" class="hide">
+      <div class="row">
+        <label for="xExpr">x(t)</label>
+        <input id="xExpr" type="text" value="3*Math.cos(t)" />
+      </div>
+      <div class="row">
+        <label for="yExpr">y(t)</label>
+        <input id="yExpr" type="text" value="3*Math.sin(t)" />
+      </div>
+      <div class="row">
+        <label for="zExpr">z(t)</label>
+        <input id="zExpr" type="text" value="0.6*Math.sin(2*t)" />
+      </div>
+      <div class="grid3">
+        <div class="row">
+          <label for="tMin">t 最小</label>
+          <input id="tMin" type="number" step="0.001" value="0" />
+        </div>
+        <div class="row">
+          <label for="tMax">t 最大</label>
+          <input id="tMax" type="number" step="0.001" value="6.283185307179586" />
+        </div>
+        <div class="row">
+          <label for="samples">分割数</label>
+          <input id="samples" type="number" min="2" max="5000" step="1" value="240" />
+        </div>
+      </div>
+      <div class="row">
+        <label for="closed">閉曲線</label>
+        <select id="closed"><option value="1">はい</option><option value="0">いいえ</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>大きさ・位置・回転</h2>
+    <div class="grid3">
+      <div class="row">
+        <label for="scale">Scale</label>
+        <input id="scale" type="number" step="0.1" value="1" />
+      </div>
+      <div class="row">
+        <label for="offsetX">X</label>
+        <input id="offsetX" type="number" step="0.1" value="0" />
+      </div>
+      <div class="row">
+        <label for="offsetY">Y</label>
+        <input id="offsetY" type="number" step="0.1" value="0" />
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="row">
+        <label for="offsetZ">Z</label>
+        <input id="offsetZ" type="number" step="0.1" value="0" />
+      </div>
+      <div class="row">
+        <label for="rotX">Pitch</label>
+        <input id="rotX" type="number" step="1" value="15" />
+      </div>
+      <div class="row">
+        <label for="rotY">Yaw</label>
+        <input id="rotY" type="number" step="1" value="25" />
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="row">
+        <label for="rotZ">Roll</label>
+        <input id="rotZ" type="number" step="1" value="0" />
+      </div>
+      <div class="row">
+        <label for="camera">Camera距離</label>
+        <input id="camera" type="number" step="0.1" value="14" />
+      </div>
+      <div class="row">
+        <label for="perspective">Perspective</label>
+        <input id="perspective" type="number" step="0.1" value="480" />
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>出力設定</h2>
+    <div class="grid">
+      <div class="row">
+        <label for="particle">Particle</label>
+        <input id="particle" type="text" value="minecraft:end_rod" />
+      </div>
+      <div class="row">
+        <label for="count">count</label>
+        <input id="count" type="number" min="1" step="1" value="1" />
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="row">
+        <label for="dx">dx</label>
+        <input id="dx" type="number" step="0.01" value="0" />
+      </div>
+      <div class="row">
+        <label for="dy">dy</label>
+        <input id="dy" type="number" step="0.01" value="0" />
+      </div>
+      <div class="row">
+        <label for="dz">dz</label>
+        <input id="dz" type="number" step="0.01" value="0" />
+      </div>
+    </div>
+    <div class="grid">
+      <div class="row">
+        <label for="speed">speed</label>
+        <input id="speed" type="number" step="0.01" value="0" />
+      </div>
+      <div class="row">
+        <label for="modeOut">mode</label>
+        <select id="modeOut"><option value="force">force</option><option value="normal">normal</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <label for="commandName">function名</label>
+      <input id="commandName" type="text" value="generated_shape" />
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="btns">
+      <button class="btn primary" id="generateBtn">更新</button>
+      <button class="btn good" id="downloadBtn">mcfunctionをダウンロード</button>
+      <button class="btn" id="copyBtn">コピー</button>
+      <button class="btn warn" id="clearBtn">リセット</button>
+    </div>
+    <div id="errorBox" class="error"></div>
+  </div>
+</aside>
+
+<main class="stage">
+  <div class="canvasWrap">
+    <canvas id="view"></canvas>
+    <div class="overlay" id="overlay">点群を描画中…</div>
+  </div>
+  <div class="footer">
+    <div class="status" id="stats">0 points</div>
+    <div class="muted">出力は 1 行 = 1 particle です。曲線の点数を増やすほど滑らかになります。</div>
+  </div>
+  <div style="padding:0 16px 16px;">
+    <label for="output">mcfunction 出力</label>
+    <textarea id="output" spellcheck="false" readonly></textarea>
+  </div>
+</main>
+
+  </div>  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const els = {
+      mode: $('mode'),
+      polygonFields: $('polygonFields'),
+      circleFields: $('circleFields'),
+      paramFields: $('paramFields'),
+      sides: $('sides'),
+      subdivisions: $('subdivisions'),
+      circleSegments: $('circleSegments'),
+      circleClosed: $('circleClosed'),
+      xExpr: $('xExpr'),
+      yExpr: $('yExpr'),
+      zExpr: $('zExpr'),
+      tMin: $('tMin'),
+      tMax: $('tMax'),
+      samples: $('samples'),
+      closed: $('closed'),
+      scale: $('scale'),
+      offsetX: $('offsetX'),
+      offsetY: $('offsetY'),
+      offsetZ: $('offsetZ'),
+      rotX: $('rotX'),
+      rotY: $('rotY'),
+      rotZ: $('rotZ'),
+      camera: $('camera'),
+      perspective: $('perspective'),
+      particle: $('particle'),
+      count: $('count'),
+      dx: $('dx'),
+      dy: $('dy'),
+      dz: $('dz'),
+      speed: $('speed'),
+      modeOut: $('modeOut'),
+      commandName: $('commandName'),
+      output: $('output'),
+      view: $('view'),
+      overlay: $('overlay'),
+      stats: $('stats'),
+      errorBox: $('errorBox'),
+      generateBtn: $('generateBtn'),
+      downloadBtn: $('downloadBtn'),
+      copyBtn: $('copyBtn'),
+      clearBtn: $('clearBtn'),
+    };
+
+    const ctx = els.view.getContext('2d');
+    let pointsWorld = [];
+    let pointsScreen = [];
+    let lastOutput = '';
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function rad(d) { return d * Math.PI / 180; }
+
+    function resizeCanvas() {
+      const wrap = els.view.parentElement;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const rect = wrap.getBoundingClientRect();
+      els.view.width = Math.floor(rect.width * dpr);
+      els.view.height = Math.floor(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    }
+
+    function rotatePoint(p, rx, ry, rz) {
+      let {x, y, z} = p;
+      // X
+      let c = Math.cos(rx), s = Math.sin(rx);
+      [y, z] = [y * c - z * s, y * s + z * c];
+      // Y
+      c = Math.cos(ry); s = Math.sin(ry);
+      [x, z] = [x * c + z * s, -x * s + z * c];
+      // Z
+      c = Math.cos(rz); s = Math.sin(rz);
+      [x, y] = [x * c - y * s, x * s + y * c];
+      return {x, y, z};
+    }
+
+    function project(p) {
+      const w = els.view.parentElement.clientWidth;
+      const h = els.view.parentElement.clientHeight;
+      const persp = Number(els.perspective.value) || 480;
+      const cam = Number(els.camera.value) || 14;
+      const z = p.z + cam;
+      const s = persp / Math.max(1e-3, z);
+      return {
+        x: w * 0.5 + p.x * s,
+        y: h * 0.5 - p.y * s,
+        s,
+      };
+    }
+
+    function evalExpr(expr) {
+      // Supports Math functions directly and common aliases.
+      const fn = new Function('t', `with (Math) { return (${expr}); }`);
+      return fn;
+    }
+
+    function polygonPoints(n, radius, subdivisions) {
+      const pts = [];
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * Math.PI * 2 - Math.PI / 2;
+        const a1 = ((i + 1) / n) * Math.PI * 2 - Math.PI / 2;
+        const p0 = { x: Math.cos(a0) * radius, y: Math.sin(a0) * radius, z: 0 };
+        const p1 = { x: Math.cos(a1) * radius, y: Math.sin(a1) * radius, z: 0 };
+        for (let j = 0; j < subdivisions; j++) {
+          const t = j / subdivisions;
+          pts.push({
+            x: p0.x * (1 - t) + p1.x * t,
+            y: p0.y * (1 - t) + p1.y * t,
+            z: 0,
+          });
+        }
+      }
+      pts.push(pts[0]);
+      return pts;
+    }
+
+    function circlePoints(segments, radius, closed) {
+      const pts = [];
+      const end = closed ? segments : segments - 1;
+      for (let i = 0; i <= end; i++) {
+        const a = (i / segments) * Math.PI * 2 - Math.PI / 2;
+        pts.push({ x: Math.cos(a) * radius, y: Math.sin(a) * radius, z: 0 });
+      }
+      return pts;
+    }
+
+    function paramPoints() {
+      const xFn = evalExpr(els.xExpr.value.trim() || '0');
+      const yFn = evalExpr(els.yExpr.value.trim() || '0');
+      const zFn = evalExpr(els.zExpr.value.trim() || '0');
+      const tMin = Number(els.tMin.value);
+      const tMax = Number(els.tMax.value);
+      const samples = clamp(Math.floor(Number(els.samples.value) || 100), 2, 10000);
+      const closed = els.closed.value === '1';
+      const pts = [];
+      const end = closed ? samples : samples - 1;
+      for (let i = 0; i <= end; i++) {
+        const t = tMin + (tMax - tMin) * (i / samples);
+        const x = Number(xFn(t));
+        const y = Number(yFn(t));
+        const z = Number(zFn(t));
+        if ([x, y, z].some(v => !Number.isFinite(v))) {
+          throw new Error(`媒介変数式が不正です。t=${t.toFixed(4)} で数値になりません。`);
+        }
+        pts.push({ x, y, z });
+      }
+      return pts;
+    }
+
+    function worldify(localPts) {
+      const scale = Number(els.scale.value) || 1;
+      const off = {
+        x: Number(els.offsetX.value) || 0,
+        y: Number(els.offsetY.value) || 0,
+        z: Number(els.offsetZ.value) || 0,
+      };
+      const rx = rad(Number(els.rotX.value) || 0);
+      const ry = rad(Number(els.rotY.value) || 0);
+      const rz = rad(Number(els.rotZ.value) || 0);
+      return localPts.map(p => {
+        const q = rotatePoint({ x: p.x * scale, y: p.y * scale, z: p.z * scale }, rx, ry, rz);
+        return { x: q.x + off.x, y: q.y + off.y, z: q.z + off.z };
+      });
+    }
+
+    function toCommand(p) {
+      const particle = els.particle.value.trim() || 'minecraft:end_rod';
+      const count = Math.max(1, Math.floor(Number(els.count.value) || 1));
+      const dx = Number(els.dx.value) || 0;
+      const dy = Number(els.dy.value) || 0;
+      const dz = Number(els.dz.value) || 0;
+      const speed = Number(els.speed.value) || 0;
+      const mode = els.modeOut.value;
+      return `particle ${particle} ${fmt(p.x)} ${fmt(p.y)} ${fmt(p.z)} ${fmt(dx)} ${fmt(dy)} ${fmt(dz)} ${fmt(speed)} ${count} ${mode}`;
+    }
+
+    function fmt(n) {
+      const v = Number(n);
+      if (!Number.isFinite(v)) return '0';
+      return (Math.abs(v) < 1e-9 ? 0 : v).toFixed(3).replace(/\.000$/, '');
+    }
+
+    function buildPoints() {
+      const mode = els.mode.value;
+      let localPts = [];
+      if (mode === 'polygon') {
+        const n = clamp(Math.floor(Number(els.sides.value) || 3), 3, 10000);
+        const subdivisions = clamp(Math.floor(Number(els.subdivisions.value) || 12), 1, 1000);
+        localPts = polygonPoints(n, 3, subdivisions);
+      } else if (mode === 'circle') {
+        const segments = clamp(Math.floor(Number(els.circleSegments.value) || 180), 3, 10000);
+        const closed = els.circleClosed.value === '1';
+        localPts = circlePoints(segments, 3, closed);
+      } else {
+        localPts = paramPoints();
+      }
+      return worldify(localPts);
+    }
+
+    function updateOutput(points) {
+      const name = (els.commandName.value.trim() || 'generated_shape').replace(/[^\w\-./]/g, '_');
+      const lines = [];
+      lines.push(`## ${name}`);
+      lines.push(`## generated by Minecraft Particle Shape Generator`);
+      lines.push(`## points: ${points.length}`);
+      lines.push('');
+      for (const p of points) lines.push(toCommand(p));
+      lastOutput = lines.join('\n');
+      els.output.value = lastOutput;
+      els.stats.textContent = `${points.length} points`;
+      els.overlay.textContent = `mode: ${els.mode.options[els.mode.selectedIndex].text} / points: ${points.length}`;
+    }
+
+    function setError(msg) {
+      els.errorBox.textContent = msg || '';
+    }
+
+    function drawAxes() {
+      const w = els.view.parentElement.clientWidth;
+      const h = els.view.parentElement.clientHeight;
+      const origin = project({ x: 0, y: 0, z: 0 });
+      const axes = [
+        { a: { x: -5, y: 0, z: 0 }, b: { x: 5, y: 0, z: 0 }, label: 'X' },
+        { a: { x: 0, y: -5, z: 0 }, b: { x: 0, y: 5, z: 0 }, label: 'Y' },
+        { a: { x: 0, y: 0, z: -5 }, b: { x: 0, y: 0, z: 5 }, label: 'Z' },
+      ];
+      ctx.save();
+      ctx.clearRect(0, 0, w, h);
+      ctx.lineWidth = 1.5;
+      ctx.font = '12px ' + getComputedStyle(document.documentElement).getPropertyValue('--mono');
+      axes.forEach(ax => {
+        const a = project(ax.a), b = project(ax.b);
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.fillText(ax.label, b.x + 4, b.y + 4);
+      });
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath(); ctx.arc(origin.x, origin.y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPoints(points) {
+      const w = els.view.parentElement.clientWidth;
+      const h = els.view.parentElement.clientHeight;
+      pointsScreen = points.map(project);
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(124,199,255,0.95)';
+      ctx.fillStyle = 'rgba(169,255,207,0.95)';
+      ctx.lineWidth = 2;
+      if (pointsScreen.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(pointsScreen[0].x, pointsScreen[0].y);
+        for (let i = 1; i < pointsScreen.length; i++) ctx.lineTo(pointsScreen[i].x, pointsScreen[i].y);
+        ctx.stroke();
+      }
+      for (const p of pointsScreen) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function draw() {
+      drawAxes();
+      if (pointsWorld.length) drawPoints(pointsWorld);
+    }
+
+    function generate() {
+      try {
+        setError('');
+        pointsWorld = buildPoints();
+        updateOutput(pointsWorld);
+        draw();
+      } catch (err) {
+        setError(String(err && err.message ? err.message : err));
+        els.output.value = '';
+        els.stats.textContent = '0 points';
+        pointsWorld = [];
+        draw();
+      }
+    }
+
+    function syncModeUI() {
+      const m = els.mode.value;
+      els.polygonFields.classList.toggle('hide', m !== 'polygon');
+      els.circleFields.classList.toggle('hide', m !== 'circle');
+      els.paramFields.classList.toggle('hide', m !== 'param');
+    }
+
+    function downloadMcfunction() {
+      if (!lastOutput.trim()) generate();
+      const name = (els.commandName.value.trim() || 'generated_shape').replace(/[^\w\-./]/g, '_');
+      const blob = new Blob([els.output.value + '\n'], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name}.mcfunction`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function copyOutput() {
+      const text = els.output.value.trim();
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        els.overlay.textContent = 'コピーしました';
+        setTimeout(() => {
+          els.overlay.textContent = `mode: ${els.mode.options[els.mode.selectedIndex].text} / points: ${pointsWorld.length}`;
+        }, 1200);
+      }).catch(() => {
+        setError('クリップボードへのコピーに失敗しました。');
+      });
+    }
+
+    function resetAll() {
+      els.mode.value = 'polygon';
+      els.sides.value = 6;
+      els.subdivisions.value = 24;
+      els.circleSegments.value = 180;
+      els.circleClosed.value = '1';
+      els.xExpr.value = '3*Math.cos(t)';
+      els.yExpr.value = '3*Math.sin(t)';
+      els.zExpr.value = '0.6*Math.sin(2*t)';
+      els.tMin.value = 0;
+      els.tMax.value = Math.PI * 2;
+      els.samples.value = 240;
+      els.closed.value = '1';
+      els.scale.value = 1;
+      els.offsetX.value = 0;
+      els.offsetY.value = 0;
+      els.offsetZ.value = 0;
+      els.rotX.value = 15;
+      els.rotY.value = 25;
+      els.rotZ.value = 0;
+      els.camera.value = 14;
+      els.perspective.value = 480;
+      els.particle.value = 'minecraft:end_rod';
+      els.count.value = 1;
+      els.dx.value = 0;
+      els.dy.value = 0;
+      els.dz.value = 0;
+      els.speed.value = 0;
+      els.modeOut.value = 'force';
+      els.commandName.value = 'generated_shape';
+      syncModeUI();
+      generate();
+    }
+
+    // Events
+    els.mode.addEventListener('change', () => { syncModeUI(); generate(); });
+    [
+      els.sides, els.subdivisions, els.circleSegments, els.circleClosed,
+      els.xExpr, els.yExpr, els.zExpr, els.tMin, els.tMax, els.samples, els.closed,
+      els.scale, els.offsetX, els.offsetY, els.offsetZ,
+      els.rotX, els.rotY, els.rotZ, els.camera, els.perspective,
+      els.particle, els.count, els.dx, els.dy, els.dz, els.speed, els.modeOut,
+      els.commandName
+    ].forEach(el => el.addEventListener('input', generate));
+
+    els.generateBtn.addEventListener('click', generate);
+    els.downloadBtn.addEventListener('click', downloadMcfunction);
+    els.copyBtn.addEventListener('click', copyOutput);
+    els.clearBtn.addEventListener('click', resetAll);
+
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('load', () => {
+      syncModeUI();
+      resizeCanvas();
+      generate();
+    });
+  </script></body>
+</html>
