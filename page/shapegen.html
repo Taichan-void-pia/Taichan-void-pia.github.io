@@ -492,7 +492,7 @@
       const dz = Number(els.dz.value) || 0;
       const speed = Number(els.speed.value) || 0;
       const mode = els.modeOut.value;
-      return `particle ${particle} ${fmt(p.x)} ${fmt(p.y)} ${fmt(p.z)} ${fmt(dx)} ${fmt(dy)} ${fmt(dz)} ${fmt(speed)} ${count} ${mode}`;
+      return `particle ${particle} ^${fmt(p.x)} ^${fmt(p.y)} ^${fmt(p.z)} ${fmt(dx)} ${fmt(dy)} ${fmt(dz)} ${fmt(speed)} ${count} ${mode}`;
     }
 
     function buildPoints() {
